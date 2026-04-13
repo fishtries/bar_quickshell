@@ -8,6 +8,7 @@ Item {
     property bool isOpen: false
     property int popoutWidth: 280
     signal closeRequested()
+    property bool autoClose: true
     
     HoverHandler {
         id: hover
@@ -15,7 +16,7 @@ Item {
     
     Timer {
         interval: 5000
-        running: root.isOpen && !hover.hovered
+        running: root.isOpen && !hover.hovered && root.autoClose
         onTriggered: root.closeRequested()
     }
 

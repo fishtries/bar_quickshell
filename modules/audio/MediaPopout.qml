@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
@@ -10,6 +11,7 @@ PopoutWrapper {
     id: root
 
     popoutWidth: 780
+    autoClose: false
 
     // ─── Данные медиа ──────────────────────────────────────────────────
     property string mediaTitle: ""
@@ -22,6 +24,26 @@ PopoutWrapper {
     // Новые свойства для прогресса
     property real mediaLength: 0
     property real mediaPosition: 0
+    property int currentLyricIndex: -1
+    property bool manualMode: false
+
+    Timer {
+        id: restoreAutoScrollTimer
+        interval: 3000 // 3 секунды
+        repeat: false
+        onTriggered: root.manualMode = false
+    }
+
+    // Функция для очистки названий (удаление feat, Remastered и т.д.)
+    function cleanMetadata(text) {
+        if (!text) return "";
+        return text.replace(/\(feat\..*?\)/gi, "")
+                   .replace(/\(with.*?\)/gi, "")
+                   .replace(/\[.*?\]/g, "")
+                   .replace(/\(.*?\)/g, "")
+                   .replace(/- .*?(Remaster|Live|Single|Version|Edit).*/gi, "")
+                   .trim();
+    }
 
     // Форматирование времени (MS -> MM:SS)
     function formatTime(s) {
@@ -29,6 +51,94 @@ PopoutWrapper {
         let min = Math.floor(s / 60);
         let sec = Math.floor(s % 60);
         return (min < 10 ? "0" + min : min) + ":" + (sec < 10 ? "0" + sec : sec);
+    }
+
+    function fetchLyrics() {
+        let cleanArtist = cleanMetadata(root.mediaArtist);
+        let cleanTitle = cleanMetadata(root.mediaTitle);
+        
+        if (!cleanArtist || !cleanTitle) return;
+
+        let url = "https://lrclib.net/api/get?artist_name=" + encodeURIComponent(cleanArtist) + "&track_name=" + encodeURIComponent(cleanTitle);
+        
+        console.log("Fetching lyrics: " + cleanArtist + " - " + cleanTitle);
+        
+        let xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    let json = JSON.parse(xhr.responseText);
+                    lyricsModel.clear();
+                    
+                    if (json.syncedLyrics) {
+                        let lines = json.syncedLyrics.split('\n');
+                        for (let i = 0; i < lines.length; i++) {
+                            let line = lines[i].trim();
+                            // Поддержка [mm:ss.xx], [mm:ss.xxx], [mm:ss]
+                            let match = line.match(/\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)/);
+                            if (match) {
+                                let min = parseInt(match[1]);
+                                let sec = parseFloat(match[2]);
+                                lyricsModel.append({ "time": min * 60 + sec, "line": match[3] });
+                            }
+                        }
+                    } else if (json.plainLyrics) {
+                        // Фаллбэк на обычный текст
+                        let lines = json.plainLyrics.split('\n');
+                        for (let i = 0; i < lines.length; i++) {
+                            if (lines[i].trim()) {
+                                lyricsModel.append({ "time": 0, "line": lines[i].trim() });
+                            }
+                        }
+                    }
+                } else {
+                    console.log("Lyrics not found for: " + cleanArtist + " - " + cleanTitle);
+                    lyricsModel.clear();
+                }
+            }
+        };
+        xhr.open("GET", url);
+        xhr.send();
+    }
+
+    Timer {
+        id: lyricsDebounceTimer
+        interval: 300
+        repeat: false
+        onTriggered: fetchLyrics()
+    }
+
+    onMediaTitleChanged: { 
+        if (mediaTitle) {
+            lyricsDebounceTimer.restart(); 
+            root.manualMode = false; // Сброс при смене трека
+        }
+    }
+
+    onMediaArtistChanged: {
+        if (mediaArtist) lyricsDebounceTimer.restart();
+    }
+
+    onMediaPositionChanged: updateSync()
+
+    onCurrentLyricIndexChanged: {
+        if (currentLyricIndex >= 0 && !root.manualMode) {
+            mediaLyrics.positionViewAtIndex(currentLyricIndex, ListView.Center);
+        }
+    }
+
+    function updateSync() {
+        let newIndex = -1;
+        for (let i = 0; i < lyricsModel.count; i++) {
+            if (lyricsModel.get(i).time <= root.mediaPosition) {
+                newIndex = i;
+            } else {
+                break;
+            }
+        }
+        if (newIndex !== root.currentLyricIndex) {
+            root.currentLyricIndex = newIndex;
+        }
     }
 
     RowLayout {
@@ -40,6 +150,8 @@ PopoutWrapper {
         // ─── ЛЕВАЯ ЧАСТЬ: Информация и плеер ─────────────────────────────
         ColumnLayout {
             Layout.preferredWidth: 320
+            Layout.minimumWidth: 320
+            Layout.maximumWidth: 320
             Layout.fillHeight: true
             spacing: 12
 
@@ -96,6 +208,41 @@ PopoutWrapper {
                     font.pixelSize: 14
                     Layout.fillWidth: true
                     elide: Text.ElideRight
+                }
+            }
+
+            // Кнопки управления
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 4
+                Layout.bottomMargin: 4
+                spacing: 40
+                
+                Text {
+                    text: "\udb81\udcae" // Prev
+                    color: prevHover.hovered ? "#ffffff" : "#888888"
+                    font.pixelSize: 28
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    HoverHandler { id: prevHover }
+                    TapHandler { onTapped: prevProc.running = true }
+                }
+
+                Text {
+                    text: root.mediaStatus === "Playing" ? "\udb80\udfe4" : "\udb81\udc0a" // Pause : Play
+                    color: playHover.hovered ? "#ffffff" : "#888888"
+                    font.pixelSize: 38
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    HoverHandler { id: playHover }
+                    TapHandler { onTapped: playPauseProc.running = true }
+                }
+
+                Text {
+                    text: "\udb81\udcad" // Next
+                    color: nextHover.hovered ? "#ffffff" : "#888888"
+                    font.pixelSize: 28
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    HoverHandler { id: nextHover }
+                    TapHandler { onTapped: nextProc.running = true }
                 }
             }
 
@@ -167,43 +314,80 @@ PopoutWrapper {
             Layout.fillHeight: true
             spacing: 12
 
-            Text {
-                text: "Lyrics"
-                color: "#888888"
-                font { pixelSize: 12; bold: true; letterSpacing: 1 }
-                Layout.alignment: Qt.AlignLeft
-            }
-
             ListView {
                 id: mediaLyrics
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.leftMargin: 20
+                Layout.rightMargin: 20
                 clip: true
                 spacing: 12
+                highlightMoveDuration: 300
+                highlightMoveVelocity: 5
+                currentIndex: root.currentLyricIndex
+                highlightRangeMode: root.manualMode ? ListView.NoHighlightRange : ListView.StrictlyEnforceRange
+                preferredHighlightBegin: height * 0.25
+                preferredHighlightEnd: height * 0.25
 
-                model: ListModel {
-                    ListElement { line: "I've been counting up"; active: false }
-                    ListElement { line: "the times that I"; active: false }
-                    ListElement { line: "did you wrong"; active: false }
-                    ListElement { line: ""; active: false }
-                    ListElement { line: "I just want you"; active: true }
-                    ListElement { line: "by my side when"; active: true }
-                    ListElement { line: "I get real gone"; active: true }
+                onMovementStarted: {
+                    root.manualMode = true;
+                    restoreAutoScrollTimer.restart();
                 }
 
+                model: ListModel { id: lyricsModel }
+
                 delegate: Text {
-                    width: parent.width
+                    id: lyricText
+                    width: ListView.view.width - 40
                     text: model.line
-                    color: model.active ? "#ffffff" : "#444444"
-                    font { 
-                        pixelSize: model.active ? 18 : 16; 
-                        bold: model.active 
+                    
+                    property bool isActive: index === root.currentLyricIndex
+                    readonly property int distance: root.currentLyricIndex >= 0 ? Math.abs(index - root.currentLyricIndex) : 0
+                    
+                    color: isActive ? "#ffffff" : "#aaaaaa"
+                    font {
+                        pixelSize: 16
+                        bold: isActive
                     }
                     wrapMode: Text.WordWrap
-                    opacity: model.active ? 1.0 : 0.4
+                    opacity: isActive ? 1.0 : 0.4
+                    scale: isActive ? 1.05 : 1.0
+                    transformOrigin: Item.Left
+                    
+                    Behavior on opacity { NumberAnimation { duration: 400 } }
+                    Behavior on color { ColorAnimation { duration: 400 } }
+                    Behavior on scale { NumberAnimation { duration: 600; easing.type: Easing.OutQuint } }
+
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blurMax: 24
+                        blur: (!root.manualMode) ? Math.min(1.0, lyricText.distance * 0.2) : 0
+                        
+                        Behavior on blur { NumberAnimation { duration: 400 } }
+                    }
                 }
             }
         }
+    }
+
+    // ─── УПРАВЛЕНИЕ (Processes) ────────────────────────────────────────
+    Process {
+        id: playPauseProc
+        command: ["playerctl", "--player=spotify,firefox,%any", "play-pause"]
+        onExited: mediaPoller.running = true
+    }
+
+    Process {
+        id: nextProc
+        command: ["playerctl", "--player=spotify,firefox,%any", "next"]
+        onExited: mediaPoller.running = true
+    }
+
+    Process {
+        id: prevProc
+        command: ["playerctl", "--player=spotify,firefox,%any", "previous"]
+        onExited: mediaPoller.running = true
     }
 
     // ─── ДАННЫЕ (Playerctl Poller) ──────────────────────────────────────
