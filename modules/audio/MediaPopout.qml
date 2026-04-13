@@ -27,6 +27,7 @@ PopoutWrapper {
     property real mediaPosition: 0
     property int currentLyricIndex: -1
     property bool manualMode: false
+    property int revealedCount: 0
 
     Timer {
         id: restoreAutoScrollTimer
@@ -54,6 +55,25 @@ PopoutWrapper {
         return (min < 10 ? "0" + min : min) + ":" + (sec < 10 ? "0" + sec : sec);
     }
 
+    // Таймер каскадного появления строк (эффект «волны»)
+    Timer {
+        id: revealTimer
+        interval: 35
+        repeat: true
+        onTriggered: {
+            if (root.revealedCount < lyricsModel.count) {
+                root.revealedCount++;
+            } else {
+                revealTimer.stop();
+            }
+        }
+    }
+
+    function startReveal() {
+        root.revealedCount = 0;
+        revealTimer.restart();
+    }
+
     function fetchLyrics() {
         let cleanArtist = cleanMetadata(root.mediaArtist);
         let cleanTitle = cleanMetadata(root.mediaTitle);
@@ -70,6 +90,7 @@ PopoutWrapper {
                 if (xhr.status === 200) {
                     let json = JSON.parse(xhr.responseText);
                     lyricsModel.clear();
+                    root.revealedCount = 0;
                     
                     if (json.syncedLyrics) {
                         let lines = json.syncedLyrics.split('\n');
@@ -92,9 +113,12 @@ PopoutWrapper {
                             }
                         }
                     }
+                    // Запускаем каскадное появление
+                    startReveal();
                 } else {
                     console.log("Lyrics not found for: " + cleanArtist + " - " + cleanTitle);
                     lyricsModel.clear();
+                    root.revealedCount = 0;
                 }
             }
         };
@@ -305,6 +329,7 @@ PopoutWrapper {
 
         // ─── ПРАВАЯ ЧАСТЬ: Текст песен (Lyrics) ──────────────────────────
         ColumnLayout {
+            visible: mediaLyrics.model && mediaLyrics.model.count > 0
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 12
@@ -323,42 +348,6 @@ PopoutWrapper {
                 highlightRangeMode: root.manualMode ? ListView.NoHighlightRange : ListView.StrictlyEnforceRange
                 preferredHighlightBegin: height * 0.25
                 preferredHighlightEnd: height * 0.25
-                
-                populate: Transition {
-                    SequentialAnimation {
-                        // Увеличиваем задержку до 80мс для красивого каскада
-                        PauseAnimation { duration: ViewTransition.index * 80 }
-                        
-                        ParallelAnimation {
-                            NumberAnimation { property: "opacity"; from: 0.0; to: 0.4; duration: 400 }
-                            NumberAnimation { 
-                                property: "y"; 
-                                from: ViewTransition.destination.y + 30; 
-                                to: ViewTransition.destination.y; 
-                                duration: 400; 
-                                easing.type: Easing.OutQuart 
-                            }
-                        }
-                    }
-                }
-
-                // Анимация при добавлении строк
-                add: Transition {
-                    SequentialAnimation {
-                        PauseAnimation { duration: ViewTransition.index * 80 }
-                        
-                        ParallelAnimation {
-                            NumberAnimation { property: "opacity"; from: 0.0; to: 0.4; duration: 400 }
-                            NumberAnimation { 
-                                property: "y"; 
-                                from: ViewTransition.destination.y + 30; 
-                                to: ViewTransition.destination.y; 
-                                duration: 400; 
-                                easing.type: Easing.OutQuart 
-                            }
-                        }
-                    }
-                }
 
                 onMovementStarted: {
                     root.manualMode = true;
@@ -374,6 +363,7 @@ PopoutWrapper {
                     
                     property bool isActive: index === root.currentLyricIndex
                     readonly property int diff: root.currentLyricIndex >= 0 ? (index - root.currentLyricIndex) : 0
+                    property bool revealed: index < root.revealedCount
                     
                     color: isActive ? "#ffffff" : "#aaaaaa"
                     font {
@@ -381,19 +371,19 @@ PopoutWrapper {
                         bold: isActive
                     }
                     wrapMode: Text.WordWrap
-                    opacity: isActive ? 1.0 : 0.4
-                    scale: isActive ? 1.05 : 1.0
+                    opacity: revealed ? (isActive ? 1.0 : 0.4) : 0.0
+                    scale: revealed ? (isActive ? 1.05 : 1.0) : 0.92
                     transformOrigin: Item.Left
                     
-                    Behavior on opacity { NumberAnimation { duration: 400 } }
+                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
                     Behavior on color { ColorAnimation { duration: 400 } }
-                    Behavior on scale { NumberAnimation { duration: 600; easing.type: Easing.OutQuint } }
+                    Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.OutQuint } }
 
                     layer.enabled: true
                     layer.effect: MultiEffect {
                         blurEnabled: true
                         blurMax: 24
-                        blur: (!root.manualMode) ? Math.min(1.0, Math.abs(lyricText.diff) * (lyricText.diff < 0 ? 0.4 : 0.2)) : 0
+                        blur: revealed ? ((!root.manualMode) ? Math.min(1.0, Math.abs(lyricText.diff) * (lyricText.diff < 0 ? 0.4 : 0.2)) : 0) : 0.6
                         
                         Behavior on blur { NumberAnimation { duration: 400 } }
                     }
