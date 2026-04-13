@@ -1,0 +1,7 @@
+singleton Theme Theme.qml
+singleton MathState state/MathState.qml
+singleton NetworkState state/NetworkState.qml
+singleton VolumeState state/VolumeState.qml
+singleton TimeState state/TimeState.qml
+singleton WindowState state/WindowState.qml
+singleton EventsState state/EventsState.qml
