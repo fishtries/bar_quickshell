@@ -28,7 +28,6 @@ PopoutWrapper {
     property int currentLyricIndex: -1
     property bool manualMode: false
     property int revealedCount: 0
-    property int waveRadius: 999  // Радиус волны при переключении строк
 
     Timer {
         id: restoreAutoScrollTimer
@@ -59,7 +58,7 @@ PopoutWrapper {
     // Таймер каскадного появления строк (эффект «волны»)
     Timer {
         id: revealTimer
-        interval: 70
+        interval: 150
         repeat: true
         onTriggered: {
             if (root.revealedCount < lyricsModel.count) {
@@ -75,19 +74,7 @@ PopoutWrapper {
         revealTimer.restart();
     }
 
-    // Таймер волны переключения строк (расширяет радиус от активной)
-    Timer {
-        id: waveTimer
-        interval: 80
-        repeat: true
-        onTriggered: {
-            if (root.waveRadius < 50) {
-                root.waveRadius++;
-            } else {
-                waveTimer.stop();
-            }
-        }
-    }
+
 
     function fetchLyrics() {
         let cleanArtist = cleanMetadata(root.mediaArtist);
@@ -172,9 +159,6 @@ PopoutWrapper {
         }
         if (newIndex !== root.currentLyricIndex) {
             root.currentLyricIndex = newIndex;
-            // Запуск волны от активной строки
-            root.waveRadius = 0;
-            waveTimer.restart();
         }
     }
 
@@ -359,9 +343,9 @@ PopoutWrapper {
                 Layout.leftMargin: 20
                 Layout.rightMargin: 20
                 clip: true
-                spacing: 12
-                highlightMoveDuration: 300
-                highlightMoveVelocity: 5
+                spacing: 8
+                highlightMoveDuration: 600
+                highlightMoveVelocity: -1
                 currentIndex: root.currentLyricIndex
                 highlightRangeMode: root.manualMode ? ListView.NoHighlightRange : ListView.StrictlyEnforceRange
                 preferredHighlightBegin: height * 0.25
@@ -374,58 +358,83 @@ PopoutWrapper {
 
                 model: ListModel { id: lyricsModel }
 
-                delegate: Text {
-                    id: lyricText
-                    width: ListView.view.width - 40
-                    text: model.line
+                delegate: Item {
+                    id: lyricContainer
+                    width: ListView.view.width
+                    height: lyricText.implicitHeight + (isActive ? 28 : 0)
                     
-                    property bool isActive: index === root.currentLyricIndex
-                    readonly property int diff: root.currentLyricIndex >= 0 ? (index - root.currentLyricIndex) : 0
-                    readonly property int absDiff: Math.abs(diff)
-                    
-                    // --- КИНЕТИКА ВОЛНЫ (загрузка) ---
+                    readonly property bool isActive: index === root.currentLyricIndex
                     readonly property bool revealed: index < root.revealedCount
-                    property real slideOffset: revealed ? 0 : 40
                     
-                    transform: Translate { y: lyricText.slideOffset }
+                    // ─── Позиция в видимой зоне ───────────────────────
+                    // Центр делегата относительно вьюпорта
+                    readonly property real viewY: y - ListView.view.contentY + height / 2
+                    // Фокусная точка (совпадает с preferredHighlightBegin)
+                    readonly property real focalPoint: ListView.view.height * 0.25
+                    // Расстояние от фокуса (0 = в центре, 1 = у края)
+                    readonly property real distFromFocal: Math.abs(viewY - focalPoint)
+                    readonly property real normalizedDist: Math.min(1.0, distFromFocal / (ListView.view.height * 0.55))
+                    
+                    Behavior on height { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
 
-                    Behavior on slideOffset { 
-                        NumberAnimation { duration: 500; easing.type: Easing.OutQuart } 
-                    }
-                    
-                    // --- ВОЛНА ПЕРЕКЛЮЧЕНИЯ ---
-                    // Волна достигла этого делегата?
-                    readonly property bool waveReached: absDiff <= root.waveRadius
-                    
-                    // Финальные целевые значения (когда волна дошла)
-                    readonly property real finalOpacity: isActive ? 1.0 : 0.4
-                    readonly property real finalScale: isActive ? 1.05 : 1.0
-                    readonly property real finalBlur: (!root.manualMode) ? Math.min(1.0, absDiff * (diff < 0 ? 0.4 : 0.2)) : 0
-                    
-                    // Предволновое состояние: строки, которых волна ещё не достигла,
-                    // остаются размытыми и приглушёнными
-                    color: isActive ? "#ffffff" : "#aaaaaa"
-                    font {
-                        pixelSize: 16
-                        bold: isActive
-                    }
-                    wrapMode: Text.WordWrap
-                    
-                    opacity: revealed ? (waveReached ? finalOpacity : Math.min(finalOpacity, 0.2)) : 0.0
-                    scale: revealed ? (waveReached ? finalScale : 0.97) : 0.92
-                    transformOrigin: Item.Left
-                    
-                    Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-                    Behavior on color { ColorAnimation { duration: 300 } }
-                    Behavior on scale { NumberAnimation { duration: 400; easing.type: Easing.OutQuint } }
+                    // ─── Jelly-эффект (пружинистая инерция) ────────────
+                    property real jellyOffset: 0
 
-                    layer.enabled: true
-                    layer.effect: MultiEffect {
-                        blurEnabled: true
-                        blurMax: 24
-                        blur: revealed ? (lyricText.waveReached ? lyricText.finalBlur : Math.max(lyricText.finalBlur, 0.7)) : 0.6
+                    Connections {
+                        target: root
+                        function onCurrentLyricIndexChanged() {
+                            // Подтолкнуть строки пропорционально расстоянию
+                            let diff = index - root.currentLyricIndex;
+                            lyricContainer.jellyOffset = diff * 8;
+                        }
+                    }
+
+                    Behavior on jellyOffset {
+                        SpringAnimation {
+                            spring: 3
+                            damping: 0.35
+                        }
+                    }
+
+                    Text {
+                        id: lyricText
+                        width: parent.width - 40
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: lyricContainer.jellyOffset
+                        text: model.line
                         
-                        Behavior on blur { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+                        // --- Начальное появление (загрузка) ---
+                        property real slideOffset: lyricContainer.revealed ? 0 : 40
+                        transform: Translate { y: lyricText.slideOffset }
+                        Behavior on slideOffset { 
+                            NumberAnimation { duration: 500; easing.type: Easing.OutQuart } 
+                        }
+                        
+                        // --- Плавное появление при reveal ---
+                        property real revealOpacity: lyricContainer.revealed ? 1.0 : 0.0
+                        Behavior on revealOpacity { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+                        
+                        color: lyricContainer.isActive ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
+                        font {
+                            pixelSize: lyricContainer.isActive ? 18 : 16
+                            bold: lyricContainer.isActive
+                        }
+                        wrapMode: Text.WordWrap
+                        
+                        // Визуалы привязаны к позиции на экране, а не к индексу
+                        opacity: revealOpacity * Math.max(0.15, 1.0 - lyricContainer.normalizedDist * 0.85)
+                        scale: Math.max(0.92, 1.0 - lyricContainer.normalizedDist * 0.08)
+                        transformOrigin: Item.Left
+                        
+                        Behavior on color { ColorAnimation { duration: 300 } }
+
+                        layer.enabled: true
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blurMax: 24
+                            blur: Math.min(1.0, lyricContainer.normalizedDist * 1.5)
+                        }
                     }
                 }
             }
