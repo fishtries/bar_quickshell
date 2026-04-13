@@ -7,6 +7,10 @@ Item {
 
     property bool isOpen: false
     property int popoutWidth: 280
+    Behavior on popoutWidth {
+        enabled: root.isOpen
+        NumberAnimation { duration: 400; easing.type: Easing.InOutQuad }
+    }
     signal closeRequested()
     property bool autoClose: true
     

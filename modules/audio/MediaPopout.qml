@@ -10,7 +10,8 @@ import "../../components"
 PopoutWrapper {
     id: root
 
-    popoutWidth: 780
+    popoutWidth: (mediaLyrics.model && mediaLyrics.model.count > 0) ? 780 : 393
+    originX: popoutWidth / 2
     autoClose: false
 
     // ─── Данные медиа ──────────────────────────────────────────────────
@@ -121,12 +122,6 @@ PopoutWrapper {
 
     onMediaPositionChanged: updateSync()
 
-    onCurrentLyricIndexChanged: {
-        if (currentLyricIndex >= 0 && !root.manualMode) {
-            mediaLyrics.positionViewAtIndex(currentLyricIndex, ListView.Center);
-        }
-    }
-
     function updateSync() {
         let newIndex = -1;
         for (let i = 0; i < lyricsModel.count; i++) {
@@ -203,7 +198,7 @@ PopoutWrapper {
 
                 Text {
                     id: trackArtistAlbum
-                    text: root.mediaArtist ? (root.mediaArtist + (root.mediaAlbum ? " — " + root.mediaAlbum : "")) : "—"
+                    text: root.mediaArtist || "—"
                     color: "#aaaaaa"
                     font.pixelSize: 14
                     Layout.fillWidth: true
@@ -328,6 +323,42 @@ PopoutWrapper {
                 highlightRangeMode: root.manualMode ? ListView.NoHighlightRange : ListView.StrictlyEnforceRange
                 preferredHighlightBegin: height * 0.25
                 preferredHighlightEnd: height * 0.25
+                
+                populate: Transition {
+                    SequentialAnimation {
+                        // Увеличиваем задержку до 80мс для красивого каскада
+                        PauseAnimation { duration: ViewTransition.index * 80 }
+                        
+                        ParallelAnimation {
+                            NumberAnimation { property: "opacity"; from: 0.0; to: 0.4; duration: 400 }
+                            NumberAnimation { 
+                                property: "y"; 
+                                from: ViewTransition.destination.y + 30; 
+                                to: ViewTransition.destination.y; 
+                                duration: 400; 
+                                easing.type: Easing.OutQuart 
+                            }
+                        }
+                    }
+                }
+
+                // Анимация при добавлении строк
+                add: Transition {
+                    SequentialAnimation {
+                        PauseAnimation { duration: ViewTransition.index * 80 }
+                        
+                        ParallelAnimation {
+                            NumberAnimation { property: "opacity"; from: 0.0; to: 0.4; duration: 400 }
+                            NumberAnimation { 
+                                property: "y"; 
+                                from: ViewTransition.destination.y + 30; 
+                                to: ViewTransition.destination.y; 
+                                duration: 400; 
+                                easing.type: Easing.OutQuart 
+                            }
+                        }
+                    }
+                }
 
                 onMovementStarted: {
                     root.manualMode = true;
@@ -342,7 +373,7 @@ PopoutWrapper {
                     text: model.line
                     
                     property bool isActive: index === root.currentLyricIndex
-                    readonly property int distance: root.currentLyricIndex >= 0 ? Math.abs(index - root.currentLyricIndex) : 0
+                    readonly property int diff: root.currentLyricIndex >= 0 ? (index - root.currentLyricIndex) : 0
                     
                     color: isActive ? "#ffffff" : "#aaaaaa"
                     font {
@@ -362,7 +393,7 @@ PopoutWrapper {
                     layer.effect: MultiEffect {
                         blurEnabled: true
                         blurMax: 24
-                        blur: (!root.manualMode) ? Math.min(1.0, lyricText.distance * 0.2) : 0
+                        blur: (!root.manualMode) ? Math.min(1.0, Math.abs(lyricText.diff) * (lyricText.diff < 0 ? 0.4 : 0.2)) : 0
                         
                         Behavior on blur { NumberAnimation { duration: 400 } }
                     }
