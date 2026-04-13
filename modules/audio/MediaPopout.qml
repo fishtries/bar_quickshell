@@ -28,6 +28,7 @@ PopoutWrapper {
     property int currentLyricIndex: -1
     property bool manualMode: false
     property int revealedCount: 0
+    property int waveRadius: 999  // Радиус волны при переключении строк
 
     Timer {
         id: restoreAutoScrollTimer
@@ -58,7 +59,7 @@ PopoutWrapper {
     // Таймер каскадного появления строк (эффект «волны»)
     Timer {
         id: revealTimer
-        interval: 35
+        interval: 70
         repeat: true
         onTriggered: {
             if (root.revealedCount < lyricsModel.count) {
@@ -72,6 +73,20 @@ PopoutWrapper {
     function startReveal() {
         root.revealedCount = 0;
         revealTimer.restart();
+    }
+
+    // Таймер волны переключения строк (расширяет радиус от активной)
+    Timer {
+        id: waveTimer
+        interval: 80
+        repeat: true
+        onTriggered: {
+            if (root.waveRadius < 50) {
+                root.waveRadius++;
+            } else {
+                waveTimer.stop();
+            }
+        }
     }
 
     function fetchLyrics() {
@@ -157,6 +172,9 @@ PopoutWrapper {
         }
         if (newIndex !== root.currentLyricIndex) {
             root.currentLyricIndex = newIndex;
+            // Запуск волны от активной строки
+            root.waveRadius = 0;
+            waveTimer.restart();
         }
     }
 
@@ -363,29 +381,51 @@ PopoutWrapper {
                     
                     property bool isActive: index === root.currentLyricIndex
                     readonly property int diff: root.currentLyricIndex >= 0 ? (index - root.currentLyricIndex) : 0
-                    property bool revealed: index < root.revealedCount
+                    readonly property int absDiff: Math.abs(diff)
                     
+                    // --- КИНЕТИКА ВОЛНЫ (загрузка) ---
+                    readonly property bool revealed: index < root.revealedCount
+                    property real slideOffset: revealed ? 0 : 40
+                    
+                    transform: Translate { y: lyricText.slideOffset }
+
+                    Behavior on slideOffset { 
+                        NumberAnimation { duration: 500; easing.type: Easing.OutQuart } 
+                    }
+                    
+                    // --- ВОЛНА ПЕРЕКЛЮЧЕНИЯ ---
+                    // Волна достигла этого делегата?
+                    readonly property bool waveReached: absDiff <= root.waveRadius
+                    
+                    // Финальные целевые значения (когда волна дошла)
+                    readonly property real finalOpacity: isActive ? 1.0 : 0.4
+                    readonly property real finalScale: isActive ? 1.05 : 1.0
+                    readonly property real finalBlur: (!root.manualMode) ? Math.min(1.0, absDiff * (diff < 0 ? 0.4 : 0.2)) : 0
+                    
+                    // Предволновое состояние: строки, которых волна ещё не достигла,
+                    // остаются размытыми и приглушёнными
                     color: isActive ? "#ffffff" : "#aaaaaa"
                     font {
                         pixelSize: 16
                         bold: isActive
                     }
                     wrapMode: Text.WordWrap
-                    opacity: revealed ? (isActive ? 1.0 : 0.4) : 0.0
-                    scale: revealed ? (isActive ? 1.05 : 1.0) : 0.92
+                    
+                    opacity: revealed ? (waveReached ? finalOpacity : Math.min(finalOpacity, 0.2)) : 0.0
+                    scale: revealed ? (waveReached ? finalScale : 0.97) : 0.92
                     transformOrigin: Item.Left
                     
-                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
-                    Behavior on color { ColorAnimation { duration: 400 } }
-                    Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.OutQuint } }
+                    Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 300 } }
+                    Behavior on scale { NumberAnimation { duration: 400; easing.type: Easing.OutQuint } }
 
                     layer.enabled: true
                     layer.effect: MultiEffect {
                         blurEnabled: true
                         blurMax: 24
-                        blur: revealed ? ((!root.manualMode) ? Math.min(1.0, Math.abs(lyricText.diff) * (lyricText.diff < 0 ? 0.4 : 0.2)) : 0) : 0.6
+                        blur: revealed ? (lyricText.waveReached ? lyricText.finalBlur : Math.max(lyricText.finalBlur, 0.7)) : 0.6
                         
-                        Behavior on blur { NumberAnimation { duration: 400 } }
+                        Behavior on blur { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
                     }
                 }
             }
@@ -455,6 +495,13 @@ PopoutWrapper {
     }
 
     onIsOpenChanged: {
-        if (isOpen) mediaPoller.running = true;
+        if (isOpen) {
+            mediaPoller.running = true;
+            // Принудительно запускаем волну при каждом открытии попаута
+            if (lyricsModel.count > 0) {
+                root.revealedCount = 0;
+                revealTimer.restart();
+            }
+        }
     }
 }
