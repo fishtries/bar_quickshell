@@ -1,199 +1,181 @@
-import http.server
+#!/usr/bin/env python3
 import json
 import os
 import tempfile
-import logging
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 
 # Configuration
+HOST = '0.0.0.0'
 PORT = 8080
-BIND_ADDRESS = '0.0.0.0'
 DATA_FILE = '/home/fish/.config/quickshell/data/events.json'
 
-# Setup logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
-
-class RemindersHandler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        # Redirect http.server logs to our logger
-        logger.info("%s - %s" % (self.address_string(), format % args))
-
+class WebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != '/sync':
             self.send_response(404)
             self.end_headers()
             return
 
-        logger.debug(f"Headers: {self.headers}")
         content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length)
+        post_data = self.rfile.read(content_length).decode('utf-8')
 
         try:
-            if not post_data:
-                raise ValueError("Empty request body")
-
-            # Auto-detect format
-            if post_data.startswith(b'BEGIN:VCALENDAR') or post_data.startswith(b'BEGIN:VTODO'):
-                logger.info("Detected iCal format")
-                tasks = self.parse_ical(post_data.decode('utf-8'))
-            else:
-                logger.info("Detected JSON format")
-                tasks = json.loads(post_data)
-                
-            if not isinstance(tasks, list):
-                if isinstance(tasks, dict):
-                    tasks = [tasks]
-                else:
-                    raise ValueError(f"Payload must be a list or object, got {type(tasks).__name__}")
-
-            logger.info(f"Received {len(tasks)} tasks from {self.address_string()}")
-            processed_data = self.process_tasks(tasks)
-            self.atomic_write(processed_data)
-
+            tasks = self.parse_incoming_data(post_data)
+            status = self.process_and_save(tasks)
+            
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "success", "count": len(tasks)}).encode())
-            logger.info(f"Successfully synced {len(tasks)} tasks to {DATA_FILE}")
+            response = {"status": "success", "message": status}
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            print(f"[{datetime.now().isoformat()}] Sync successful: {status}")
             
         except Exception as e:
-            logger.error(f"Error processing request from {self.address_string()}: {str(e)}")
-            logger.debug(f"Raw data received: {post_data!r}")
-            self.send_response(400)
-            self.send_header('Content-Type', 'application/json')
+            self.send_response(500)
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode())
+            error_msg = f"Error processing request: {str(e)}"
+            self.wfile.write(error_msg.encode('utf-8'))
+            print(f"[{datetime.now().isoformat()}] {error_msg}")
 
-    def parse_ical(self, data):
+    def parse_incoming_data(self, data):
         """
-        Simple iCal parser to extract tasks from VTODO blocks.
+        Handle various JSON formats received from iOS Shortcuts:
+        1. Proper JSON array: [...]
+        2. Proper single JSON object: {...}
+        3. New-line delimited JSON (NDJSON): {...}\n{...}
+        4. Concatenated JSON: {...}{...}
         """
+        data = data.strip()
+        if not data:
+            return []
+
+        # 1. Attempt standard JSON parsing (Array or single Object)
+        try:
+            parsed = json.loads(data)
+            if isinstance(parsed, list): return parsed
+            if isinstance(parsed, dict): return [parsed]
+        except json.JSONDecodeError:
+            pass
+
+        # 2. Attempt parsing as concatenated objects (common with Shortcuts "Combine Text")
         tasks = []
-        current_task = None
+        decoder = json.JSONDecoder()
+        pos = 0
+        while pos < len(data):
+            try:
+                # Skip whitespace/junk
+                while pos < len(data) and data[pos] not in '{[':
+                    pos += 1
+                if pos >= len(data): break
+                
+                obj, new_pos = decoder.raw_decode(data, pos)
+                if isinstance(obj, list):
+                    tasks.extend(obj)
+                else:
+                    tasks.append(obj)
+                pos = new_pos
+            except (json.JSONDecodeError, ValueError):
+                # If we hit an error, skip one char and try again
+                pos += 1
         
-        # Standardize lines (handle folded lines if any)
-        lines = data.replace('\r\n ', '').replace('\n ', '').splitlines()
-        
-        for line in lines:
-            line = line.strip()
-            if not line: continue
+        if not tasks:
+            # Emergency log for debugging
+            log_path = '/home/fish/.config/quickshell/data/last_failed_request.raw'
+            with open(log_path, 'w', encoding='utf-8') as f:
+                f.write(data)
+            print(f"Warning: Parser failed to find any objects. Raw body saved to {log_path}")
             
-            if line.startswith('BEGIN:VTODO'):
-                current_task = {}
-            elif current_task is not None:
-                if line.startswith('END:VTODO'):
-                    tasks.append(current_task)
-                    current_task = None
-                elif ':' in line:
-                    key_part, value = line.split(':', 1)
-                    key = key_part.split(';')[0] # Remove params like ;TZID=...
-                    
-                    if key == 'SUMMARY':
-                        current_task['title'] = value
-                    elif key in ('DUE', 'DTSTART'):
-                        current_task['dueDate'] = value
-                    elif key == 'X-APPLE-LIST-NAME':
-                        current_task['list'] = value
         return tasks
 
-    def process_tasks(self, tasks):
-        """
-        Transforms raw tasks into the target structure:
-        { "YYYY-MM-DD": [ { "title": "...", "list": "...", "time": "HH:MM" } ] }
-        """
-        result = {}
-        for task in tasks:
-            title = task.get('title', 'No Title')
-            list_name = task.get('list', 'Reminders')
-            date_str = task.get('dueDate') or task.get('date')
-
-            if not date_str:
-                continue
-
+    def process_and_save(self, new_tasks):
+        # 1. Transform new tasks
+        transformed_new = {}
+        for task in new_tasks:
             try:
-                dt = None
-                # Try parsing with various formats
-                # 1. iCal format: 20260419T070000
-                # 2. ISO with TZ
-                # 3. ISO without Ms
-                # 4. Simple date-time
-                formats = (
-                    "%Y%m%dT%H%M%S",        # iCal basic
-                    "%Y-%m-%dT%H:%M:%S%z", # ISO with TZ
-                    "%Y-%m-%dT%H:%M:%S",   # ISO
-                    "%Y-%m-%d %H:%M:%S",
-                    "%Y-%m-%d %H:%M"
-                )
+                # Expecting format: {"title": "...", "list": "...", "datetime": "2026-04-19T07:00:00+03:00"}
+                dt_str = task.get('datetime')
+                if not dt_str:
+                    continue
                 
-                clean_date = date_str.split('.')[0].replace('-', '').replace(':', '') if 'T' in date_str and len(date_str) < 20 else date_str.split('.')[0]
+                dt = datetime.fromisoformat(dt_str)
+                date_key = dt.strftime("%Y-%m-%d")
+                time_val = dt.strftime("%H:%M")
                 
-                # Special handling for iCal compact format vs ISO
-                for fmt in formats:
-                    try:
-                        # For iCal compact, we need the version without separators
-                        if fmt == "%Y%m%dT%H:%M:%S": continue # redundant
-                        
-                        test_str = date_str.split('.')[0]
-                        if fmt == "%Y%m%dT%H:%M:%S": test_str = test_str.replace('-', '').replace(':', '')
-                        
-                        dt = datetime.strptime(test_str.replace('Z', ''), fmt.replace('%z', '') if '%z' not in fmt else fmt)
-                        break
-                    except:
-                        continue
+                task_item = {
+                    "title": task.get('title', 'Untitled'),
+                    "list": task.get('list', 'Reminders'),
+                    "time": time_val
+                }
                 
-                if not dt:
-                    # Fallback
-                    dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-
-                day_key = dt.strftime("%Y-%m-%d")
-                time_str = dt.strftime("%H:%M")
-
-                if day_key not in result:
-                    result[day_key] = []
-                
-                result[day_key].append({
-                    "title": title,
-                    "list": list_name,
-                    "time": time_str
-                })
+                if date_key not in transformed_new:
+                    transformed_new[date_key] = []
+                transformed_new[date_key].append(task_item)
             except Exception as e:
-                logger.warning(f"Failed to parse date '{date_str}': {e}")
-                continue
-        
-        # Sort tasks within each day by time
-        for day in result:
-            result[day].sort(key=lambda x: x['time'])
-            
-        return result
+                print(f"Skipping malformed task: {task}. Error: {e}")
 
-    def atomic_write(self, data):
-        dir_name = os.path.dirname(DATA_FILE)
-        os.makedirs(dir_name, exist_ok=True)
-        
-        # Use tempfile to ensure atomic write
-        fd, temp_path = tempfile.mkstemp(dir=dir_name, prefix='events_', suffix='.json')
+        # 2. Read existing data
+        existing_data = {}
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                    existing_data = json.load(f)
+            except Exception as e:
+                print(f"Warning: Could not read existing file: {e}")
+
+        # 3. Merge data
+        added_count = 0
+        for date_key, tasks in transformed_new.items():
+            if date_key not in existing_data:
+                existing_data[date_key] = []
+            
+            for task in tasks:
+                # Simple deduplication based on title, list, and time
+                is_duplicate = any(
+                    ext['title'] == task['title'] and 
+                    ext['list'] == task['list'] and 
+                    ext['time'] == task['time']
+                    for ext in existing_data[date_key]
+                )
+                if not is_duplicate:
+                    existing_data[date_key].append(task)
+                    added_count += 1
+            
+            # Sort tasks by time for each date
+            existing_data[date_key].sort(key=lambda x: x['time'])
+
+        # 4. Atomic write
+        self.atomic_write(DATA_FILE, existing_data)
+        return f"Processed {len(new_tasks)} items, added {added_count} new unique tasks."
+
+    def atomic_write(self, filepath, data):
+        dir_name = os.path.dirname(filepath)
+        if not os.path.exists(dir_name):
+            os.makedirs(dir_name, exist_ok=True)
+            
+        # Use tempfile to write atomized
+        fd, temp_path = tempfile.mkstemp(dir=dir_name, prefix=".events_tmp_")
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(temp_path, DATA_FILE)
-        except Exception as e:
+            # Atomic replace
+            os.replace(temp_path, filepath)
+            # Ensure proper permissions (optional, but good for local config)
+            os.chmod(filepath, 0o644)
+        except Exception:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-            raise e
+            raise
 
 def run():
-    server_address = (BIND_ADDRESS, PORT)
+    server_address = (HOST, PORT)
+    httpd = HTTPServer(server_address, WebhookHandler)
+    print(f"Starting Apple Reminders Webhook Server on {HOST}:{PORT}...")
     try:
-        httpd = http.server.HTTPServer(server_address, RemindersHandler)
-        logger.info(f"Starting webhook server on {BIND_ADDRESS}:{PORT}...")
         httpd.serve_forever()
-    except Exception as e:
-        logger.error(f"Server failed: {e}")
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+        httpd.server_close()
 
 if __name__ == '__main__':
     run()

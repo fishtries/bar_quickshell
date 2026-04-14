@@ -1,0 +1,11 @@
+[Unit]
+Description=Apple Reminders Webhook Sync Server
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/fish/.config/quickshell/scripts/webhook_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
