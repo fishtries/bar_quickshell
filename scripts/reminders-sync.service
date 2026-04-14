@@ -1,0 +1,12 @@
+[Unit]
+Description=Apple Reminders Sync for Quickshell
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.config/quickshell/scripts/webhook_server.py
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
