@@ -3,8 +3,10 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 
 import "core"
+import "components"
 import "modules/clock"
 import "modules/workspaces"
 import "modules/audio"
@@ -55,27 +57,81 @@ PanelWindow {
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        // ─── Центральная группа: ИДЕАЛЬНЫЙ ЦЕНТР ───────────────────────────
-        Row {
-            id: centerGroup
+        // ─── Центральная группа: АНТИГРАВИТАЦИОННЫЙ ОСТРОВ ────────────────
+        Item {
+            id: centerGroupWrapper
             anchors.centerIn: parent
-            spacing: 20
+            width: centerGroup.width
+            height: centerGroup.height
 
-            ActiveTitleModule {
-                anchors.verticalCenter: parent.verticalCenter
+            Row {
+                id: centerGroup
+                anchors.centerIn: parent
+                spacing: 20
+                
+                // Эффект проваливания при активации напоминания
+                scale: EventsState.isReminderActive ? 0.95 : 1.0
+                Behavior on scale { NumberAnimation { duration: 600; easing.type: Easing.OutQuint } }
+
+                // Размытие виджетов
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 30
+                    blur: EventsState.isReminderActive ? 0.6 : 0.0
+                    Behavior on blur { NumberAnimation { duration: 600 } }
+                }
+
+                ActiveTitleModule {
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                WorkspacesModule {
+                    interactionEnabled: !EventsState.isReminderActive && !mathModule.isActive
+                }
+
+                MathModule { id: mathModule }
+                
+                Item {
+                    width: audioVis.implicitWidth
+                    height: audioVis.implicitHeight
+                    anchors.verticalCenter: parent.verticalCenter
+                    CavaVisualizer { id: audioVis }
+                }
             }
 
-            WorkspacesModule {
-                interactionEnabled: !mathModule.isActive
-            }
+            // --- Dynamic Island (Antigravity) ---
+            Rectangle {
+                id: antigravityIsland
+                z: 100
+                anchors.centerIn: parent
+                color: Theme.bgPopout
+                radius: height / 2
+                
+                property bool active: EventsState.isReminderActive
+                
+                // Анимированные размеры
+                width: active ? Math.max(reminderText.implicitWidth + 60, 240) : 40
+                height: active ? 45 : 12
+                opacity: active ? 1.0 : 0.0
+                
+                // Резиновая анимация (Elastic)
+                Behavior on width { NumberAnimation { easing.type: Easing.OutElastic; easing.amplitude: 0.6; easing.period: 0.5; duration: 900 } }
+                Behavior on height { NumberAnimation { easing.type: Easing.OutElastic; easing.amplitude: 0.6; easing.period: 0.5; duration: 900 } }
+                Behavior on opacity { NumberAnimation { duration: 400 } }
 
-            MathModule { id: mathModule }
-            
-            Item {
-                width: audioVis.implicitWidth
-                height: audioVis.implicitHeight
-                anchors.verticalCenter: parent.verticalCenter
-                CavaVisualizer { id: audioVis }
+                AppText {
+                    id: reminderText
+                    anchors.centerIn: parent
+                    text: EventsState.currentReminderText
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
+                    color: Theme.textPrimary
+                    
+                    // Текст появляется только когда остров раскрылся
+                    opacity: antigravityIsland.width > 200 ? 1.0 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                }
             }
         }
 
