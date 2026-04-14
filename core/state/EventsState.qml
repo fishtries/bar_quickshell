@@ -12,6 +12,7 @@ Item {
     property bool isReminderActive: false
     property string currentReminderText: ""
     property var eventMap: ({})
+    property var sortedEventsList: [] // Удобный массив для ListView
 
     // --- Configuration ---
     readonly property string fileUri: "file:///home/fish/.config/quickshell/data/events.json"
@@ -35,6 +36,7 @@ Item {
                     try {
                         if (xhr.responseText && xhr.responseText.trim().length > 0) {
                             root.eventMap = JSON.parse(xhr.responseText);
+                            updateSortedList();
                             checkUpcoming();
                         }
                     } catch(e) {
@@ -91,6 +93,22 @@ Item {
 
         root.isReminderActive = activeFound;
         root.currentReminderText = foundText;
+    }
+
+    function updateSortedList() {
+        let keys = Object.keys(root.eventMap);
+        // Сортируем ключи (даты ГГГГ-ММ-ДД сортируются как строки идеально)
+        keys.sort();
+        
+        let newList = [];
+        for (let i = 0; i < keys.length; i++) {
+            let k = keys[i];
+            newList.push({
+                dateStr: k,
+                tasks: root.eventMap[k]
+            });
+        }
+        root.sortedEventsList = newList;
     }
 
     // Helper to format date keys manually if needed by other components
