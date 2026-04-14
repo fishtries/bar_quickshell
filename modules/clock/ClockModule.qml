@@ -41,7 +41,7 @@ Item {
         }
     }
 
-    CalendarPopout {
+    ClockPopout {
         id: popout
         isOpen: root.popoutOpen
         onCloseRequested: root.popoutOpen = false
