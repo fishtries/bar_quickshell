@@ -73,63 +73,12 @@ PopoutWrapper {
             Layout.fillHeight: true
             color: "transparent"
             
-            ListView {
-                id: remindersList
-                anchors.fill: parent
-                anchors.margins: 4
-                model: EventsState.sortedEventsList
-                spacing: 20
-                clip: true
-                
-                // Плавный скролл при изменении контента или программном сдвиге
-                Behavior on contentY { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-
-                delegate: Column {
-                    width: remindersList.width
-                    spacing: 10
-                    
-                    // Заголовок даты
-                    AppText {
-                        text: modelData.dateStr
-                        font { pixelSize: 13; weight: Font.Bold }
-                        color: Theme.info
-                        opacity: 0.9
-                    }
-
-                    // Группа задач на день
-                    Repeater {
-                        model: modelData.tasks
-                        
-                        delegate: Rectangle {
-                            width: parent.width
-                            height: 40
-                            radius: 8
-                            color: Theme.bgPanel
-                            
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
-                                spacing: 12
-                                
-                                AppText {
-                                    text: modelData.time || "00:00"
-                                    font { pixelSize: 12; weight: Font.Medium; family: Theme.fontClock }
-                                    color: Theme.textSecondary
-                                    Layout.preferredWidth: 40
-                                }
-                                
-                                AppText {
-                                    text: modelData.title
-                                    font.pixelSize: 13
-                                    color: Theme.textPrimary
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                }
-                            }
-                        }
-                    }
-                }
+            AppText {
+                text: "Reminders Placeholder"
+                anchors.centerIn: parent
+                color: Theme.textSecondary
+                opacity: 0.5
+                font.pixelSize: 12
             }
         }
     }
