@@ -5,12 +5,14 @@ import QtQuick
 import QtQuick.Layouts
 
 import "core"
+import "core/state"
 import "modules/clock"
 import "modules/workspaces"
 import "modules/audio"
 import "modules/math"
 import "modules/controlcenter"
 import "modules/volume"
+import QtQuick.Effects
 
 PanelWindow {
     anchors.top: true
@@ -48,55 +50,130 @@ PanelWindow {
         anchors.leftMargin: 20
         anchors.rightMargin: 20
 
-        // ─── Левая группа: Часы ───────────────────────────────────────────
-        ClockModule {
-            id: clockModule
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-        }
+        // ─── СЛОЙ 1 (z: 1): ФОНОВЫЕ МОДУЛИ ───────────────────────────────
+        Item {
+            id: backdrop
+            anchors.fill: parent
+            z: 1
 
-        // ─── Центральная группа: ИДЕАЛЬНЫЙ ЦЕНТР ───────────────────────────
-        Row {
-            id: centerGroup
-            anchors.centerIn: parent
-            spacing: 20
-
-            ActiveTitleModule {
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            WorkspacesModule {
-                interactionEnabled: !mathModule.isActive
-            }
-
-            MathModule { id: mathModule }
+            // Анимации размытия и масштаба
+            scale: EventsState.isReminderActive ? 0.95 : 1.0
             
-            Item {
-                width: audioVis.implicitWidth
-                height: audioVis.implicitHeight
+            // Слой эффектов
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blurMax: 32
+                blur: EventsState.isReminderActive ? 0.8 : 0.0
+                
+                Behavior on blur { NumberAnimation { duration: 450; easing.type: Easing.OutQuint } }
+            }
+
+            Behavior on scale { NumberAnimation { duration: 450; easing.type: Easing.OutBack } }
+
+            // Левая группа: Часы
+            ClockModule {
+                id: clockModule
+                anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                CavaVisualizer { id: audioVis }
+            }
+
+            // Центральная группа (без воркспейсов, они в острове)
+            Row {
+                id: centerGroup
+                anchors.centerIn: parent
+                spacing: 20
+                visible: !EventsState.isReminderActive
+                opacity: visible ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 300 } }
+
+                ActiveTitleModule {
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                MathModule { id: mathModule }
+                
+                Item {
+                    width: audioVis.implicitWidth
+                    height: audioVis.implicitHeight
+                    anchors.verticalCenter: parent.verticalCenter
+                    CavaVisualizer { id: audioVis }
+                }
+            }
+
+            // Правая группа
+            Row {
+                id: rightGroup
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 12
+
+                VolumeModule { 
+                    id: volModule 
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Item {
+                    width: ccModule.implicitWidth
+                    height: ccModule.implicitHeight
+                    ControlCenterModule {
+                        id: ccModule
+                    }
+                }
             }
         }
 
-        // ─── Правая группа: У КРАЯ ─────────────────────────────────────────
-        Row {
-            id: rightGroup
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 12
+        // ─── СЛОЙ 2 (z: 100): DYNAMIC ISLAND ────────────────────────────
+        Item {
+            id: islandContainer
+            anchors.centerIn: parent
+            z: 100
 
-            VolumeModule { 
-                id: volModule 
-                anchors.verticalCenter: parent.verticalCenter
-            }
+            Rectangle {
+                id: island
+                anchors.centerIn: parent
+                color: "black"
+                radius: EventsState.isReminderActive ? 18 : 12
 
-            // Control Center
-            Item {
-                width: ccModule.implicitWidth
-                height: ccModule.implicitHeight
-                ControlCenterModule {
-                    id: ccModule
+                // Размеры острова
+                width: EventsState.isReminderActive 
+                    ? reminderText.implicitWidth + 60 
+                    : workspaces.implicitWidth + 10
+                height: EventsState.isReminderActive ? 42 : 32
+
+                Behavior on width { NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+                Behavior on height { NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+                Behavior on radius { NumberAnimation { duration: 450 } }
+
+                // Воркспейсы (прячутся при активации напоминания)
+                WorkspacesModule {
+                    id: workspaces
+                    anchors.centerIn: parent
+                    opacity: EventsState.isReminderActive ? 0 : 1
+                    visible: opacity > 0
+                    interactionEnabled: !EventsState.isReminderActive
+                    Behavior on opacity { NumberAnimation { duration: 250 } }
+                }
+
+                // Текст напоминания (появляется при активации)
+                AppText {
+                    id: reminderText
+                    text: EventsState.currentReminderText
+                    anchors.centerIn: parent
+                    color: "white"
+                    font { pixelSize: 15; weight: Font.Medium }
+                    opacity: EventsState.isReminderActive ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity { NumberAnimation { duration: 350 } }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        if (EventsState.isReminderActive) {
+                            clockModule.popoutOpen = !clockModule.popoutOpen;
+                        }
+                    }
                 }
             }
         }

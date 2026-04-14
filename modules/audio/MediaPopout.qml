@@ -137,13 +137,21 @@ PopoutWrapper {
 
     onMediaTitleChanged: { 
         if (mediaTitle) {
+            lyricsModel.clear();
+            root.revealedCount = 0;
+            root.currentLyricIndex = -1;
             lyricsDebounceTimer.restart(); 
             root.manualMode = false; // Сброс при смене трека
         }
     }
 
     onMediaArtistChanged: {
-        if (mediaArtist) lyricsDebounceTimer.restart();
+        if (mediaArtist) {
+            lyricsModel.clear();
+            root.revealedCount = 0;
+            root.currentLyricIndex = -1;
+            lyricsDebounceTimer.restart();
+        }
     }
 
     onMediaPositionChanged: updateSync()
@@ -277,8 +285,13 @@ PopoutWrapper {
                     Layout.fillWidth: true
                     from: 0
                     to: root.mediaLength > 0 ? root.mediaLength : 100
-                    value: root.mediaPosition
-                    enabled: false // Пока только скелет, без перемотки
+                    value: pressed ? value : root.mediaPosition
+                    enabled: root.mediaStatus !== "Stopped"
+                    
+                    onMoved: {
+                        seekProc.command = ["playerctl", "-p", root.mediaPlayer || "spotify,firefox,%any", "position", String(Math.floor(value))];
+                        seekProc.running = true;
+                    }
                     
                     background: Rectangle {
                         x: progressSlider.leftPadding
@@ -331,7 +344,10 @@ PopoutWrapper {
 
         // ─── ПРАВАЯ ЧАСТЬ: Текст песен (Lyrics) ──────────────────────────
         ColumnLayout {
-            visible: mediaLyrics.model && mediaLyrics.model.count > 0
+            opacity: (mediaLyrics.model && mediaLyrics.model.count > 0) ? 1.0 : 0.0
+            visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+            
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 12
@@ -431,9 +447,9 @@ PopoutWrapper {
 
                         layer.enabled: true
                         layer.effect: MultiEffect {
-                            blurEnabled: true
+                            blurEnabled: !lyricContainer.isActive
                             blurMax: 24
-                            blur: Math.min(1.0, lyricContainer.normalizedDist * 1.5)
+                            blur: Math.min(1.0, lyricContainer.normalizedDist * (lyricContainer.viewY < lyricContainer.focalPoint ? 7.5 : 1.5))
                         }
                     }
                 }
@@ -457,6 +473,12 @@ PopoutWrapper {
     Process {
         id: prevProc
         command: ["playerctl", "--player=spotify,firefox,%any", "previous"]
+        onExited: mediaPoller.running = true
+    }
+
+    Process {
+        id: seekProc
+        command: ["playerctl", "position", "0"]
         onExited: mediaPoller.running = true
     }
 
