@@ -1,80 +1,30 @@
 pragma Singleton
 import QtQuick
-import Quickshell.Io
 
+/**
+ * EventsState - Singleton for managing Apple Reminders and upcoming deadlines.
+ * Synchronized with /home/fish/.config/quickshell/data/events.json
+ */
 Item {
     id: root
 
-    property string dataDir: "/home/fish/.config/quickshell/data"
-    property string fileUri: dataDir + "/events.json"
-    
-    // Внутренний словарь: ключ - "YYYY-MM-DD", значение - массив строк
+    // --- Public State ---
+    property bool isReminderActive: false
+    property string currentReminderText: ""
     property var eventMap: ({})
-    
-    property bool loaded: false
 
-    signal eventsChanged()
+    // --- Configuration ---
+    readonly property string fileUri: "file:///home/fish/.config/quickshell/data/events.json"
 
-    function dateKey(d, m, y) {
-        return `${y}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
-    }
+    // --- Logic ---
 
-    function getEventsForDate(d, m, y) {
-        let key = dateKey(d, m, y);
-        return root.eventMap[key] || [];
-    }
-
-    function hasEvents(d, m, y) {
-        let events = getEventsForDate(d, m, y);
-        return events.length > 0;
-    }
-
-    function addEvent(d, m, y, text) {
-        if (!text || text.trim() === "") return;
-        
-        let key = dateKey(d, m, y);
-        let curr = root.eventMap[key] || [];
-        curr.push(text);
-        
-        // Создаем новый объект для триггера биндингов
-        let newMap = Object.assign({}, root.eventMap);
-        newMap[key] = curr;
-        root.eventMap = newMap;
-        
-        saveEvents();
-        root.eventsChanged(); 
-    }
-
-    function removeEvent(d, m, y, index) {
-        let key = dateKey(d, m, y);
-        let curr = root.eventMap[key] || [];
-        if (index >= 0 && index < curr.length) {
-            curr.splice(index, 1);
-            
-            let newMap = Object.assign({}, root.eventMap);
-            if (curr.length === 0) {
-                delete newMap[key];
-            } else {
-                newMap[key] = curr;
-            }
-            root.eventMap = newMap;
-            
-            saveEvents();
-            root.eventsChanged();
-        }
-    }
-
-    // ─── Сохранение и загрузка ───────────────────────────────────────
-
-    // Процесс для асинхронной записи
-    Process {
-        id: saveProcess
-    }
-
-    function saveEvents() {
-        let jsonStr = JSON.stringify(root.eventMap).replace(/'/g, "'\\''");
-        saveProcess.command = ["bash", "-c", `mkdir -p ${root.dataDir} && echo '${jsonStr}' > ${root.fileUri}`];
-        saveProcess.running = true;
+    Timer {
+        id: syncTimer
+        interval: 60000 // 1 minute
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: loadEvents()
     }
 
     function loadEvents() {
@@ -83,22 +33,70 @@ Item {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status === 200 || xhr.status === 0) {
                     try {
-                        if (xhr.responseText) {
+                        if (xhr.responseText && xhr.responseText.trim().length > 0) {
                             root.eventMap = JSON.parse(xhr.responseText);
+                            checkUpcoming();
                         }
                     } catch(e) {
-                         console.error("[EventsState] Error parsing JSON:", e); 
+                        console.error("[EventsState] Error parsing JSON:", e);
                     }
                 }
-                root.loaded = true;
-                root.eventsChanged();
             }
         };
-        xhr.open("GET", "file://" + root.fileUri, true);
+        xhr.open("GET", root.fileUri, true);
         xhr.send();
     }
 
-    Component.onCompleted: {
-        loadEvents();
+    function checkUpcoming() {
+        let now = new Date();
+        
+        // Get today key: YYYY-MM-DD
+        let year = now.getFullYear();
+        let month = (now.getMonth() + 1).toString().padStart(2, '0');
+        let day = now.getDate().toString().padStart(2, '0');
+        let todayKey = `${year}-${month}-${day}`;
+        
+        let tasks = root.eventMap[todayKey] || [];
+        let activeFound = false;
+        let foundText = "";
+
+        for (let i = 0; i < tasks.length; i++) {
+            let task = tasks[i];
+            if (!task.time) continue;
+
+            // Parse "HH:MM"
+            let timeParts = task.time.split(':');
+            if (timeParts.length !== 2) continue;
+            
+            let h = parseInt(timeParts[0]);
+            let m = parseInt(timeParts[1]);
+
+            let taskDate = new Date();
+            taskDate.setHours(h, m, 0, 0);
+
+            // Calculate difference in minutes
+            let diffMinutes = (taskDate.getTime() - now.getTime()) / 60000;
+
+            /**
+             * Reminder logic:
+             * - Task is in the next 15 minutes (diff <= 15)
+             * - Task was in the last 5 minutes (diff >= -5)
+             */
+            if (diffMinutes <= 15 && diffMinutes >= -5) {
+                activeFound = true;
+                foundText = task.title;
+                break; // Stop at first upcoming reminder
+            }
+        }
+
+        root.isReminderActive = activeFound;
+        root.currentReminderText = foundText;
     }
+
+    // Helper to format date keys manually if needed by other components
+    function dateKey(d, m, y) {
+        return `${y}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+    }
+
+    Component.onCompleted: loadEvents()
 }

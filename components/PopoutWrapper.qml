@@ -42,7 +42,7 @@ Item {
         width: 0
         height: 0
         radius: 16
-        color: Qt.rgba(0.05, 0.05, 0.05, 0.9)
+        color: Qt.rgba(0.05, 0.05, 0.05, 1)
         // Вычисляются через анимацию x
         x: root.originX
         y: 0
