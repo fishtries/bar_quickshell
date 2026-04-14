@@ -11,13 +11,6 @@ Item {
     
     property bool popoutOpen: false
     property Item popoutItem: popout
-    property bool needsKeyboard: popout.inputFocused
-    
-    onPopoutOpenChanged: {
-        if (!popoutOpen) {
-            popout.releaseFocus();
-        }
-    }
 
     AppText {
         id: timeText

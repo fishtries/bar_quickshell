@@ -135,11 +135,6 @@ Item {
                     
                     readonly property bool isCurrentMonth: modelData.month === root.viewMonth
                     
-                    // Хак для перерисовки привязок при изменении map в EventsState
-                    readonly property bool hasEvt: {
-                        var trigger = EventsState.eventMap;
-                        return EventsState.hasEvents(modelData.day, modelData.month, modelData.year);
-                    }
                     
                     // Фон (подсветка выбранного дня / сегодняшнего)
                     Rectangle {
@@ -173,16 +168,6 @@ Item {
                         }
                     }
 
-                    // Индикатор события
-                    Rectangle {
-                        visible: hasEvt
-                        width: 4; height: 4
-                        radius: 2
-                        color: (isToday && isSelected) ? "#000000" : Theme.info
-                        anchors.bottom: parent.bottom
-                        anchors.bottomMargin: 4
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
 
                     HoverHandler { id: dayHover }
                     
@@ -193,10 +178,6 @@ Item {
                             root.selectedMonth = modelData.month;
                             root.selectedYear = modelData.year;
                             
-                            // Снимаем фокус с ввода при выборе даты
-                            if (root.parent && root.parent.parent && typeof root.parent.parent.releaseFocus === "function") {
-                                root.parent.parent.releaseFocus();
-                            }
                             
                             // Если кликнули на день из другого месяца, перелистываем туда
                             if (modelData.month !== root.viewMonth) {
@@ -228,7 +209,6 @@ Item {
                 day: prevMonthLastDay.getDate() - i + 1,
                 month: month === 1 ? 12 : month - 1,
                 year: month === 1 ? year - 1 : year,
-                hasEvent: false
             });
         }
         
@@ -238,7 +218,6 @@ Item {
                 day: i,
                 month: month,
                 year: year,
-                hasEvent: false // Сюда потом можно подтягивать события
             });
         }
         
@@ -249,7 +228,6 @@ Item {
                 day: i,
                 month: month === 12 ? 1 : month + 1,
                 year: month === 12 ? year + 1 : year,
-                hasEvent: false
             });
         }
         
