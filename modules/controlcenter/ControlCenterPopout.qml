@@ -146,12 +146,11 @@ PopoutWrapper {
                     }
 
                     QuickButton {
-                        icon: "\udb81\udcf7"
-                        label: "Screenshot"
+                        icon: "\uf185" // Sun icon
+                        label: "Display"
                         onClicked: {
-                            root.closeRequested()
-                            Hyprland.dispatch("exec grimshot savecopy anything")
-                        }
+                            IslandState.trigger("screenshot")
+                        } 
                     }
 
                     QuickButton {

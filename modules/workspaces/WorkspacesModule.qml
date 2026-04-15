@@ -2,17 +2,63 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
+import QtQuick.Effects
 import "../../components"
 import "../../core"
 
 Rectangle {
     id: root
-    color: Theme.bgPanel
-    radius: Theme.radiusPanel
+    
+    // Morphing properties
+    readonly property bool isIsland: IslandState.isActive
+    
+    color: isIsland ? "#000000" : Theme.bgPanel
+    radius: isIsland ? 18 : Theme.radiusPanel
     property bool interactionEnabled: true
+    
+    // Blur spike logic
+    property real animBlur: 0.0
+    onIsIslandChanged: blurPulse.restart()
 
-    implicitWidth: layout.implicitWidth + 12
-    implicitHeight: layout.implicitHeight + 14
+    SequentialAnimation {
+        id: blurPulse
+        NumberAnimation { target: root; property: "animBlur"; from: 0; to: 1.0; duration: 200; easing.type: Easing.OutSine }
+        NumberAnimation { target: root; property: "animBlur"; to: 0.0; duration: 300; easing.type: Easing.Quad }
+    }
+
+    implicitWidth: isIsland ? 600 : (layout.implicitWidth + 12)
+    implicitHeight: isIsland ? 80 : (layout.implicitHeight + 14)
+
+    transform: Translate {
+        y: root.isIsland ? 18 : 0
+        Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
+    }
+
+    // Smooth Transitions
+    Behavior on color { ColorAnimation { duration: 400 } }
+    Behavior on radius { NumberAnimation { duration: 400 } }
+    Behavior on implicitWidth { 
+        NumberAnimation { 
+            duration: 1000; 
+            easing.type: Easing.OutElastic
+            easing.amplitude: 0.1; easing.period: 0.9 
+        } 
+    }
+    Behavior on implicitHeight { 
+        NumberAnimation { 
+            duration: 600; 
+            easing.type: Easing.OutElastic
+            easing.amplitude: 0.9
+        } 
+    }
+
+    // Secondary Effects (Blur/Fade)
+    layer.enabled: animBlur > 0
+    layer.effect: MultiEffect {
+        blurEnabled: true
+        blurMax: 32
+        blur: root.animBlur
+    }
 
     ListModel { id: wsModel }
 
@@ -64,10 +110,15 @@ Rectangle {
 
     Component.onCompleted: updateModel()
 
+    // ─── Content 1: Workspaces ──────────────────────────────────────
     RowLayout {
         id: layout
         anchors.centerIn: parent
         spacing: 0
+        opacity: root.isIsland ? 0.0 : 1.0
+        scale: root.isIsland ? 0.8 : 1.0
+        Behavior on opacity { NumberAnimation { duration: 100 } }
+        Behavior on scale { NumberAnimation { duration: 500 } }
 
         Repeater {
             model: wsModel
@@ -124,11 +175,38 @@ Rectangle {
 
                     MouseArea {
                         anchors.fill: parent
-                        enabled: root.interactionEnabled
+                        enabled: root.interactionEnabled && !root.isIsland
                         onClicked: Hyprland.dispatch("workspace " + wId)
                     }
                 }
             }
+        }
+    }
+
+    // ─── Content 2: Island Overlay ──────────────────────────────────
+    RowLayout {
+        id: islandContent
+        anchors.fill: parent
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        spacing: 12
+        
+        opacity: root.isIsland ? 1.0 : 0.0
+        scale: root.isIsland ? 1.0 : 0.6
+        Behavior on opacity { NumberAnimation { duration: 400 } }
+        Behavior on scale { NumberAnimation { duration: 600; easing.type: Easing.OutBack } }
+
+        AppIcon {
+            text: IslandState.sourceModule === "screenshot" ? "\udb81\udcf7" : "\uf00c"
+            font.pixelSize: 18
+            color: Theme.success
+        }
+
+        AppText {
+            text: IslandState.sourceModule === "screenshot" ? "Screenshot Saved" : "Success"
+            color: "#ffffff"
+            font { pixelSize: 14; weight: Font.Medium }
+            Layout.fillWidth: true
         }
     }
 }

@@ -5,3 +5,6 @@ singleton VolumeState state/VolumeState.qml
 singleton TimeState state/TimeState.qml
 singleton WindowState state/WindowState.qml
 singleton EventsState state/EventsState.qml
+singleton NotificationState state/NotificationState.qml
+singleton IslandState IslandState.qml
+

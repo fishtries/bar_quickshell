@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 
 import "core"
 import "modules/clock"
@@ -10,6 +11,7 @@ import "modules/workspaces"
 import "modules/audio"
 import "modules/math"
 import "modules/controlcenter"
+import "modules/notifications"
 import "modules/volume"
 
 PanelWindow {
@@ -63,18 +65,69 @@ PanelWindow {
 
             ActiveTitleModule {
                 anchors.verticalCenter: parent.verticalCenter
+                opacity: IslandState.isActive ? 0 : 1
+                scale: IslandState.isActive ? 0.1 : 1.0
+                transform: Translate {
+                    x: IslandState.isActive ? 100 : 0
+                    Behavior on x { NumberAnimation { duration: 800; easing.type: Easing.OutQuint } }
+                }
+                Behavior on opacity { NumberAnimation { duration: 400 } }
+                Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.Elastic; easing.period: 0.5 } }
+
+                layer.enabled: IslandState.isActive
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 32
+                    blur: IslandState.isActive ? 1.0 : 0.0
+                    Behavior on blur { NumberAnimation { duration: 400 } }
+                }
             }
 
             WorkspacesModule {
                 interactionEnabled: !mathModule.isActive
             }
 
-            MathModule { id: mathModule }
+            MathModule { 
+                id: mathModule 
+                opacity: IslandState.isActive ? 0 : 1
+                scale: IslandState.isActive ? 0.1 : 1.0
+                transform: Translate {
+                    x: IslandState.isActive ? -100 : 0
+                    Behavior on x { NumberAnimation { duration: 800; easing.type: Easing.OutQuint } }
+                }
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+                Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.Elastic; easing.period: 0.5 } }
+
+                layer.enabled: IslandState.isActive
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 32
+                    blur: IslandState.isActive ? 1.0 : 0.0
+                    Behavior on blur { NumberAnimation { duration: 400 } }
+                }
+            }
             
             Item {
                 width: audioVis.implicitWidth
                 height: audioVis.implicitHeight
                 anchors.verticalCenter: parent.verticalCenter
+                opacity: IslandState.isActive ? 0 : 1
+                scale: IslandState.isActive ? 0.1 : 1.0
+                transform: Translate {
+                    x: IslandState.isActive ? -150 : 0
+                    Behavior on x { NumberAnimation { duration: 800; easing.type: Easing.OutQuint } }
+                }
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+                Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.Elastic; easing.period: 0.5 } }
+                
+                layer.enabled: IslandState.isActive
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 32
+                    blur: IslandState.isActive ? 1.0 : 0.0
+                    Behavior on blur { NumberAnimation { duration: 400 } }
+                }
+
                 CavaVisualizer { id: audioVis }
             }
         }
@@ -100,5 +153,9 @@ PanelWindow {
                 }
             }
         }
+    }
+
+    DynamicIsland {
+        onRequestControlCenter: ccModule.popoutOpen = true
     }
 }

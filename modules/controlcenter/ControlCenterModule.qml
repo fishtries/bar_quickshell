@@ -4,11 +4,13 @@ import Quickshell
 import QtQuick.Effects
 import "../../core"
 
-Item {
+Rectangle {
     id: root
+    color: Theme.bgPanel
+    radius: Theme.radiusPanel
 
-    implicitWidth: iconsRow.width
-    implicitHeight: iconsRow.height
+    implicitWidth: iconsRow.width + 12
+    implicitHeight: iconsRow.height + 4
 
     property bool popoutOpen: false
     property Item popoutItem: popout
@@ -87,6 +89,7 @@ Item {
     // ─── Двойная иконка в баре ──────────────────────────────────────────
     Row {
         id: iconsRow
+        anchors.centerIn: parent
         spacing: 0
 
         // Bluetooth icon

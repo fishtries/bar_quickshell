@@ -11,6 +11,12 @@ Item {
     implicitWidth: animatedContent.width
     implicitHeight: 30
 
+    // Dynamic Island integration
+    opacity: IslandState.isActive ? 0.0 : 1.0
+    scale: IslandState.isActive ? 0.95 : 1.0
+    Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
+    Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.OutBack } }
+
     Behavior on implicitWidth { 
         NumberAnimation { 
             duration: 600
