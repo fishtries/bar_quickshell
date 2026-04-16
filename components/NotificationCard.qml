@@ -37,7 +37,7 @@ Rectangle {
         onClicked: {
             if (root.modelData) {
                 root.modelData.invokeDefaultAction();
-                root.modelData.close();
+                root.modelData.dismiss();
             }
         }
     }
@@ -96,7 +96,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: if (root.modelData) root.modelData.close()
+                    onClicked: if (root.modelData) root.modelData.dismiss()
                 }
             }
         }

@@ -35,6 +35,7 @@ Item {
 
     // Масштаб пузыря — можно анимировать из дочерних компонентов
     property real bubbleScale: 1.0
+    property alias maskItem: popoutRect
 
     Rectangle {
         id: popoutRect

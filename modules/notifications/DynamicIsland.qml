@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Services.Notifications
 import "../../core"
 import "../../components"
 
@@ -15,6 +16,19 @@ PanelWindow {
     property bool expanded: false
 
     readonly property bool hasNotification: currentNotification !== null
+
+    // Store the latest notification directly from the signal
+    // (UntypedObjectModel doesn't support .get())
+    Connections {
+        target: NotificationState
+        function onNewNotification(notification) {
+            root.currentNotification = notification;
+            if (root.previousCount === 0) {
+                root.previousCount = 1;
+            }
+            root.refreshCurrentNotification(true);
+        }
+    }
     readonly property string visualState: !hasNotification ? "hidden" : expanded ? "expanded" : "compact"
     readonly property int topOffset: 8
     readonly property int compactWidth: 160
@@ -43,10 +57,6 @@ PanelWindow {
     WlrLayershell.namespace: "qs-dynamic-island"
     implicitHeight: bubble.height > 0 ? bubble.height + topOffset : 0
 
-    function latestNotification() {
-        return notificationTracker.count > 0 ? NotificationState.activeNotifications.get(notificationTracker.count - 1) : null;
-    }
-
     function restartAutoHide() {
         autoHideTimer.stop();
         if (hasNotification && !interactionArea.containsMouse) {
@@ -55,8 +65,6 @@ PanelWindow {
     }
 
     function refreshCurrentNotification(isNewArrival) {
-        currentNotification = latestNotification();
-
         if (!hasNotification) {
             expanded = false;
             expandTimer.stop();
@@ -79,14 +87,20 @@ PanelWindow {
         }
     }
 
-    Instantiator {
+    ListView {
         id: notificationTracker
+        visible: false
+        width: 0
+        height: 0
         model: NotificationState.activeNotifications
-        delegate: QtObject {}
+        delegate: Item {}
 
         onCountChanged: {
             const isNewArrival = count > root.previousCount;
             root.previousCount = count;
+            if (count === 0) {
+                root.currentNotification = null;
+            }
             root.refreshCurrentNotification(isNewArrival);
         }
     }
@@ -114,7 +128,7 @@ PanelWindow {
         repeat: false
         onTriggered: {
             if (root.currentNotification) {
-                root.currentNotification.close();
+                root.currentNotification.dismiss();
             }
         }
     }
@@ -209,13 +223,13 @@ PanelWindow {
 
                     if (root.visualState === "compact") {
                         root.requestControlCenter();
-                        root.currentNotification.close();
+                        root.currentNotification.dismiss();
                         return;
                     }
 
                     if (root.visualState === "expanded") {
                         root.currentNotification.invokeDefaultAction();
-                        root.currentNotification.close();
+                        root.currentNotification.dismiss();
                     }
                 }
             }

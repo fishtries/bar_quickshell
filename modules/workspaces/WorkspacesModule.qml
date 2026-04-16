@@ -23,7 +23,7 @@ Rectangle {
     SequentialAnimation {
         id: blurPulse
         NumberAnimation { target: root; property: "animBlur"; from: 0; to: 1.0; duration: 200; easing.type: Easing.OutSine }
-        NumberAnimation { target: root; property: "animBlur"; to: 0.0; duration: 300; easing.type: Easing.Quad }
+        NumberAnimation { target: root; property: "animBlur"; to: 0.0; duration: 300; easing.type: Easing.OutQuad }
     }
 
     implicitWidth: isIsland ? 600 : (layout.implicitWidth + 12)

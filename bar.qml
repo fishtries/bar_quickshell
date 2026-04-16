@@ -13,6 +13,7 @@ import "modules/math"
 import "modules/controlcenter"
 import "modules/notifications"
 import "modules/volume"
+import "components"
 
 PanelWindow {
     anchors.top: true
@@ -37,8 +38,9 @@ PanelWindow {
         Region { item: layoutContainer }
         Region { item: clockModule.popoutItem }
         Region { item: mathModule.popoutItem }
-        Region { item: ccModule.popoutItem }
+        Region { item: ccModule.popoutItem.maskItem }
         Region { item: audioVis.popoutItem }
+        Region { item: notifCards }
     }
     
     Item {
@@ -142,6 +144,14 @@ PanelWindow {
             VolumeModule { 
                 id: volModule 
                 anchors.verticalCenter: parent.verticalCenter
+                opacity: ccModule.isNotifIsland ? 0 : 1
+                scale: ccModule.isNotifIsland ? 0.5 : 1.0
+                transform: Translate {
+                    x: ccModule.isNotifIsland ? 60 : 0
+                    Behavior on x { NumberAnimation { duration: 600; easing.type: Easing.OutQuint } }
+                }
+                Behavior on opacity { NumberAnimation { duration: 300 } }
+                Behavior on scale { NumberAnimation { duration: 400; easing.type: Easing.OutElastic; easing.period: 0.5 } }
             }
 
             // Control Center
@@ -155,7 +165,23 @@ PanelWindow {
         }
     }
 
-    DynamicIsland {
-        onRequestControlCenter: ccModule.popoutOpen = true
+    // ─── Notification cards below the island ────────────────────────────
+    NotifCardStack {
+        id: notifCards
+        anchors.right: parent.right
+        anchors.rightMargin: 20
+        visible: !ccModule.popoutOpen && ccModule.isNotifIsland
+        y: {
+            if (!ccModule.isNotifIsland) return layoutContainer.height + 8
+            // Island visual bottom = layoutContainer center + island height/2 + translate offset
+            var islandH = ccModule.notifExpanded ? 120 : 64
+            var translateY = ccModule.notifExpanded ? 48 : 18
+            var islandBottom = 32 + islandH / 2 + translateY
+            return islandBottom + 8
+        }
+        Behavior on y { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
+        islandNotification: ccModule.currentNotification
     }
+
+    NotificationOverlay {}
 }

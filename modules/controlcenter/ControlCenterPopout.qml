@@ -10,7 +10,7 @@ import "../../core"
 PopoutWrapper {
     id: root
 
-    popoutWidth: 320
+    popoutWidth: 660
 
     signal requestMathDetails()
     signal mathSessionChanged()
@@ -67,7 +67,7 @@ PopoutWrapper {
                 case "wifi": return wifiPage.implicitHeight;
                 case "bluetooth": return btPage.implicitHeight;
                 case "math": return mathPage.implicitHeight;
-                default: return gridContent.implicitHeight;
+                default: return gridPage.implicitHeight;
             }
         }
         Behavior on implicitHeight {
@@ -82,7 +82,8 @@ PopoutWrapper {
         Item {
             id: gridPage
             width: parent.width
-            implicitHeight: gridContent.implicitHeight
+            implicitHeight: mainGridLayout.implicitHeight
+            height: implicitHeight
 
             property real targetOpacity: root.currentIndex === 0 ? 1.0 : 0.0
             property real targetBlur: root.currentIndex === 0 ? 0.0 : 0.6
@@ -100,74 +101,268 @@ PopoutWrapper {
                 blur: gridPage.targetBlur
             }
 
-            ColumnLayout {
-                id: gridContent
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: 8
+            RowLayout {
+                id: mainGridLayout
+                anchors.fill: parent
+                spacing: 16
 
-                GridLayout {
+                ColumnLayout {
+                    id: gridContent
                     Layout.fillWidth: true
-                    columns: 3
-                    columnSpacing: 8
-                    rowSpacing: 8
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 8
 
-                    QuickButton {
-                        icon: root.wifiConnected ? "\udb82\udd28" : "\udb82\udd2b"
-                        label: "Wi-Fi"
-                        isActive: root.wifiConnected
-                        onClicked: NetworkState.toggleWifi()
-                        onRightClicked: root.currentPage = "wifi"
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 3
+                        columnSpacing: 8
+                        rowSpacing: 8
+
+                        QuickButton {
+                            icon: root.wifiConnected ? "\udb82\udd28" : "\udb82\udd2b"
+                            label: "Wi-Fi"
+                            isActive: root.wifiConnected
+                            onClicked: NetworkState.toggleWifi()
+                            onRightClicked: root.currentPage = "wifi"
+                        }
+
+                        QuickButton {
+                            icon: root.btStatus === "off" ? "\udb80\udcb2" : "\udb80\udcaf"
+                            label: "Bluetooth"
+                            isActive: root.btStatus === "on" || root.btStatus === "connected"
+                            onClicked: NetworkState.toggleBluetooth()
+                            onRightClicked: root.currentPage = "bluetooth"
+                        }
+
+                        QuickButton {
+                            icon: root.nightLightActive ? "\udb80\udd5f" : "\udb80\udd5e"
+                            label: "Night Light"
+                            isActive: root.nightLightActive
+                            onClicked: {
+                                Hyprland.dispatch("exec pkill hyprsunset || hyprsunset -t 3500")
+                                root.nightLightActive = !root.nightLightActive
+                            }
+                        }
+
+                        QuickButton {
+                            icon: MathState.isActive ? "\uf00c" : "\udb81\udc6a"
+                            label: "Math"
+                            isActive: MathState.isActive
+                            onClicked: root.currentPage = "math"
+                        }
+
+                        QuickButton {
+                            icon: "\uf185" // Sun icon
+                            label: "Display"
+                            onClicked: {
+                                IslandState.trigger("screenshot")
+                            }
+                        }
+
+                        QuickButton {
+                            icon: "\udb80\udc03"
+                            label: "Settings"
+                            onClicked: {
+                                root.closeRequested()
+                                Hyprland.dispatch("exec env XDG_CURRENT_DESKTOP=GNOME gnome-control-center")
+                            }
+                        }
+
+                        QuickButton {
+                            icon: ""
+                            label: "Media"
+                            onClicked: {
+                                root.closeRequested()
+                                Hyprland.dispatch("exec xdg-open ~/Pictures")
+                            }
+                        }
                     }
+                }
 
-                    QuickButton {
-                        icon: root.btStatus === "off" ? "\udb80\udcb2" : "\udb80\udcaf"
-                        label: "Bluetooth"
-                        isActive: root.btStatus === "on" || root.btStatus === "connected"
-                        onClicked: NetworkState.toggleBluetooth()
-                        onRightClicked: root.currentPage = "bluetooth"
-                    }
+                Rectangle {
+                    width: 1
+                    color: Qt.rgba(1, 1, 1, 0.08)
+                    Layout.fillHeight: true
+                }
 
-                    QuickButton {
-                        icon: root.nightLightActive ? "\udb80\udd5f" : "\udb80\udd5e"
-                        label: "Night Light"
-                        isActive: root.nightLightActive
-                        onClicked: {
-                            Hyprland.dispatch("exec pkill hyprsunset || hyprsunset -t 3500")
-                            root.nightLightActive = !root.nightLightActive
+                ColumnLayout {
+                    id: notificationColumn
+                    Layout.preferredWidth: 320
+                    Layout.fillHeight: true
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 10
+
+                    property real panelHeight: Math.max(160, gridContent.implicitHeight - notificationsHeader.implicitHeight - spacing)
+
+                    RowLayout {
+                        id: notificationsHeader
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        AppText {
+                            text: "Notifications"
+                            color: "#ffffff"
+                            font { pixelSize: 14; bold: true }
+                            Layout.fillWidth: true
+                        }
+
+                        Rectangle {
+                            visible: notificationList.count > 0
+                            implicitWidth: 28
+                            implicitHeight: 28
+                            radius: 14
+                            color: clearAllMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                text: "󰆴"
+                                color: "#ffffff"
+                                font.pixelSize: 14
+                            }
+
+                            MouseArea {
+                                id: clearAllMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: NotificationState.clearAll()
+                            }
                         }
                     }
 
-                    QuickButton {
-                        icon: MathState.isActive ? "\uf00c" : "\udb81\udc6a"
-                        label: "Math"
-                        isActive: MathState.isActive
-                        onClicked: root.currentPage = "math"
-                    }
+                    Item {
+                        visible: notificationList.count === 0
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredHeight: notificationColumn.panelHeight
 
-                    QuickButton {
-                        icon: "\uf185" // Sun icon
-                        label: "Display"
-                        onClicked: {
-                            IslandState.trigger("screenshot")
-                        } 
-                    }
-
-                    QuickButton {
-                        icon: "\udb80\udc03"
-                        label: "Settings"
-                        onClicked: {
-                            root.closeRequested()
-                            Hyprland.dispatch("exec env XDG_CURRENT_DESKTOP=GNOME gnome-control-center")
+                        Text {
+                            text: "No new notifications"
+                            color: "#666666"
+                            font.pixelSize: 13
+                            anchors.centerIn: parent
                         }
                     }
 
-                    QuickButton {
-                        icon: ""
-                        label: "Media"
-                        onClicked: {
-                            root.closeRequested()
-                            Hyprland.dispatch("exec xdg-open ~/Pictures")
+                    ListView {
+                        id: notificationList
+                        visible: count > 0
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredHeight: notificationColumn.panelHeight
+                        clip: true
+                        spacing: 8
+                        model: NotificationState.activeNotifications
+
+                        add: Transition {
+                            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 300; easing.type: Easing.OutQuad }
+                            NumberAnimation { property: "x"; from: notificationList.width * 0.3; to: 0; duration: 400; easing.type: Easing.OutQuint }
+                        }
+
+                        remove: Transition {
+                            NumberAnimation { property: "opacity"; to: 0; duration: 200; easing.type: Easing.InQuad }
+                            NumberAnimation { property: "x"; to: -notificationList.width * 0.2; duration: 250; easing.type: Easing.InQuad }
+                        }
+
+                        displaced: Transition {
+                            NumberAnimation { property: "y"; duration: 300; easing.type: Easing.OutQuad }
+                            NumberAnimation { property: "opacity"; to: 1; duration: 200 }
+                        }
+
+                        delegate: Rectangle {
+                            width: ListView.view ? ListView.view.width : 320
+                            height: notificationLayout.implicitHeight + 16
+                            radius: 12
+                            color: Qt.rgba(1, 1, 1, notificationMouse.containsMouse ? 0.12 : 0.06)
+                            border.color: notificationMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : "transparent"
+                            border.width: 1
+
+                            property var notificationData: modelData
+
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                            MouseArea {
+                                id: notificationMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (notificationData) {
+                                        notificationData.invokeDefaultAction();
+                                        notificationData.dismiss();
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                id: notificationLayout
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 4
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    AppText {
+                                        text: notificationData && notificationData.appName ? notificationData.appName : "System"
+                                        color: Theme.textSecondary
+                                        font { pixelSize: 12; weight: Font.DemiBold }
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Rectangle {
+                                        implicitWidth: 20
+                                        implicitHeight: 20
+                                        radius: 10
+                                        color: dismissMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                        z: 1
+
+                                        AppText {
+                                            anchors.centerIn: parent
+                                            text: "✕"
+                                            font.pixelSize: 11
+                                            color: Theme.textSecondary
+                                        }
+
+                                        MouseArea {
+                                            id: dismissMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (notificationData) {
+                                                    notificationData.dismiss();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                AppText {
+                                    Layout.fillWidth: true
+                                    text: notificationData && notificationData.summary ? notificationData.summary : "Notification"
+                                    color: Theme.textPrimary
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 3
+                                    elide: Text.ElideRight
+                                    font { pixelSize: 14; weight: Font.DemiBold }
+                                }
+
+                                AppText {
+                                    Layout.fillWidth: true
+                                    text: notificationData && notificationData.body ? notificationData.body : ""
+                                    visible: text !== ""
+                                    color: Theme.textSecondary
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 4
+                                    elide: Text.ElideRight
+                                    font.pixelSize: 12
+                                }
+                            }
                         }
                     }
                 }

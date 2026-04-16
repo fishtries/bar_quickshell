@@ -24,10 +24,11 @@ PanelWindow {
     WlrLayershell.namespace: "qs-notifications"
 
     color: "transparent"
+    visible: notificationList.count > 0
 
     // Dynamic Window size (includes 10px padding for margins)
-    width: 390  // 380 + 10px right margin
-    height: 1010 // 1000 + 10px top margin
+    implicitWidth: visible ? 390 : 0
+    implicitHeight: visible ? contentArea.height + 10 : 0
 
     // Input Mask: Only capture clicks on the actual notification cards
     mask: Region {
@@ -42,13 +43,14 @@ PanelWindow {
         anchors.topMargin: 10
         anchors.rightMargin: 10
         width: 380
-        height: 1000
+        height: Math.min(1000, notificationList.contentHeight)
 
         ListView {
             id: notificationList
             anchors.fill: parent
             spacing: Theme.spacingSmall
             interactive: false // Model manages items
+            clip: true
 
             model: NotificationState.activeNotifications
 
@@ -59,7 +61,7 @@ PanelWindow {
 
                 NotificationCard {
                     id: card
-                    modelData: model
+                    modelData: modelData
                     anchors.right: parent.right
                 }
 
@@ -69,7 +71,7 @@ PanelWindow {
                     running: !card.hovered // Pause auto-close if user is reading
                     repeat: false
                     onTriggered: {
-                        if (modelData) modelData.close();
+                        if (modelData) modelData.dismiss();
                     }
                 }
             }
