@@ -25,6 +25,7 @@ PopoutWrapper {
             case "wifi": return 1;
             case "bluetooth": return 2;
             case "math": return 3;
+            case "localsend": return 4;
             default: return 0;
         }
     }
@@ -67,6 +68,7 @@ PopoutWrapper {
                 case "wifi": return wifiPage.implicitHeight;
                 case "bluetooth": return btPage.implicitHeight;
                 case "math": return mathPage.implicitHeight;
+                case "localsend": return lsPage.implicitHeight;
                 default: return gridPage.implicitHeight;
             }
         }
@@ -152,7 +154,7 @@ PopoutWrapper {
                         }
 
                         QuickButton {
-                            icon: "\uf185" // Sun icon
+                            icon: "\uf185"
                             label: "Display"
                             onClicked: {
                                 IslandState.trigger("screenshot")
@@ -175,6 +177,12 @@ PopoutWrapper {
                                 root.closeRequested()
                                 Hyprland.dispatch("exec xdg-open ~/Pictures")
                             }
+                        }
+
+                        QuickButton {
+                            icon: "\uf1d8"
+                            label: "LocalSend"
+                            onClicked: root.currentPage = "localsend"
                         }
                     }
                 }
@@ -1044,10 +1052,39 @@ PopoutWrapper {
                 }
             }
         }
-    }
 
-    // =====================================================================
-    //  POLLING: Wi-Fi
+        // ─────────────────────────────────────────────────────────────────
+        //  СТРАНИЦА 4: LocalSend
+        // ─────────────────────────────────────────────────────────────────
+        Item {
+            id: lsPageItem
+            width: parent.width
+            implicitHeight: lsPage.implicitHeight
+
+            property real targetOpacity: root.currentIndex === 4 ? 1.0 : 0.0
+            property real targetBlur: root.currentIndex === 4 ? 0.0 : 0.6
+
+            opacity: targetOpacity
+            enabled: opacity > 0
+
+            Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
+            Behavior on targetBlur { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
+
+            layer.enabled: targetBlur > 0
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blurMax: 32
+                blur: lsPageItem.targetBlur
+            }
+
+            LocalSendPage {
+                id: lsPage
+                anchors.left: parent.left
+                anchors.right: parent.right
+                onBackRequested: root.currentPage = "grid"
+            }
+        }
+    }
     // =====================================================================
     property string wifiPendingId: ""
     ListModel { id: wifiAvailModel }

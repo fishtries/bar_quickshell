@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
+import "../core"
 
 Item {
     id: root
@@ -9,7 +10,7 @@ Item {
     property int popoutWidth: 280
     Behavior on popoutWidth {
         enabled: root.isOpen
-        NumberAnimation { duration: 800; easing.type: Easing.InOutQuint }
+        NumberAnimation { duration: AnimationConfig.durationVerySlow; easing.type: AnimationConfig.easingMovementInOut }
     }
     signal closeRequested()
     property bool autoClose: true
@@ -19,7 +20,7 @@ Item {
     }
     
     Timer {
-        interval: 5000
+        interval: AnimationConfig.timerPopoutAutoClose
         running: root.isOpen && !hover.hovered && root.autoClose
         onTriggered: root.closeRequested()
     }
@@ -37,13 +38,17 @@ Item {
     property real bubbleScale: 1.0
     property alias maskItem: popoutRect
 
+    readonly property real bubbleRadius: Theme.radiusPanel
+    readonly property real bubbleDiameter: bubbleRadius * 2
+    readonly property real contentPadding: Theme.radiusPopout
+
     Rectangle {
         id: popoutRect
         
         width: 0
         height: 0
-        radius: 16
-        color: Qt.rgba(0.05, 0.05, 0.05, 1)
+        radius: Theme.radiusPopout
+        color: Theme.bgPopout
         // Вычисляются через анимацию x
         x: root.originX
         y: 0
@@ -51,13 +56,15 @@ Item {
         scale: root.bubbleScale
         transformOrigin: Item.Top
         
-        // Целевая точка для перемещения кружка к центру попапа
-        property real targetCenterY: Math.max(0, (contentColumn.implicitHeight + 32 - 36) / 2)
+        // Целевая точка для перемещения кружка к центру будущего попапа
+        property real targetCenterY: Math.max(0, (contentColumn.implicitHeight + root.contentPadding * 2 - root.bubbleDiameter) / 2)
+        property real collapsedX: root.originX - root.bubbleRadius
+        property real collapseLiftY: targetCenterY / 3
         
         states: State {
             name: "open"
             when: root.isOpen
-            PropertyChanges { target: popoutRect; width: root.popoutWidth; height: contentColumn.implicitHeight + 32; x: 0; y: 0; blurValue: 0 }
+            PropertyChanges { target: popoutRect; width: root.popoutWidth; height: contentColumn.implicitHeight + root.contentPadding * 2; x: 0; y: 0; blurValue: 0 }
             PropertyChanges { target: contentColumn; opacity: 1.0; scale: 1.0 }
         }
         
@@ -67,21 +74,25 @@ Item {
                 SequentialAnimation {
                     // Фаза 1: кружок появляется из иконки
                     ParallelAnimation {
-                        NumberAnimation { target: popoutRect; property: "width"; to: 36; duration: 10; easing.type: Easing.OutQuad }
-                        NumberAnimation { target: popoutRect; property: "height"; to: 36; duration: 10; easing.type: Easing.OutQuad }
-                        NumberAnimation { target: popoutRect; property: "x"; to: root.originX - 18; duration: 10; easing.type: Easing.OutQuad }
+                        NumberAnimation { target: popoutRect; property: "width"; to: root.bubbleDiameter; duration: AnimationConfig.durationMicro; easing.type: AnimationConfig.easingDefaultOut }
+                        NumberAnimation { target: popoutRect; property: "height"; to: root.bubbleDiameter; duration: AnimationConfig.durationMicro; easing.type: AnimationConfig.easingDefaultOut }
+                        NumberAnimation { target: popoutRect; property: "x"; to: popoutRect.collapsedX; duration: AnimationConfig.durationMicro; easing.type: AnimationConfig.easingDefaultOut }
                     }
                     // Фаза 2: кружок скользит вниз к центру будущего попапа
-                    NumberAnimation { target: popoutRect; property: "y"; to: popoutRect.targetCenterY; duration: 80; easing.type: Easing.InOutQuad }
+                    NumberAnimation { target: popoutRect; property: "y"; to: popoutRect.targetCenterY; duration: AnimationConfig.durationSwift; easing.type: AnimationConfig.easingDefaultInOut }
                     // Фаза 3: кружок раскрывается в полноценный попап
                     ParallelAnimation {
-                        NumberAnimation { target: popoutRect; property: "width"; duration: 400; easing.type: Easing.OutElastic; easing.amplitude: 0.5; easing.period: 0.9 }
-                        NumberAnimation { target: popoutRect; property: "x"; duration: 400; easing.type: Easing.OutElastic; easing.amplitude: 0.5; easing.period: 0.9 }
-                        NumberAnimation { target: popoutRect; property: "height"; duration: 400; easing.type: Easing.OutElastic; easing.amplitude: 0.5; easing.period: 0.9 }
-                        NumberAnimation { target: popoutRect; property: "y"; duration: 800; easing.type: Easing.OutElastic; easing.amplitude: 0.1; easing.period: 0.7 }
-                        NumberAnimation { target: popoutRect; property: "blurValue"; duration: 200; easing.type: Easing.OutQuad }
-                        NumberAnimation { target: contentColumn; property: "opacity"; duration: 800; easing.type: Easing.OutQuad }
-                        NumberAnimation { target: contentColumn; property: "scale"; duration: 900; easing.type: Easing.OutElastic; easing.amplitude: 0.5; easing.period: 0.4 }
+                        ParallelAnimation {
+                            NumberAnimation { target: popoutRect; property: "width"; duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingSpringOut; easing.amplitude: AnimationConfig.springAmplitudePopout; easing.period: AnimationConfig.springPeriodPopout }
+                            NumberAnimation { target: popoutRect; property: "x"; duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingSpringOut; easing.amplitude: AnimationConfig.springAmplitudePopout; easing.period: AnimationConfig.springPeriodPopout }
+                            NumberAnimation { target: popoutRect; property: "height"; duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingSpringOut; easing.amplitude: AnimationConfig.springAmplitudePopout; easing.period: AnimationConfig.springPeriodPopout }
+                            NumberAnimation { target: popoutRect; property: "y"; duration: AnimationConfig.durationVerySlow; easing.type: AnimationConfig.easingSpringOut; easing.amplitude: AnimationConfig.springAmplitudePopoutY; easing.period: AnimationConfig.springPeriodPopoutY }
+                        }
+                        ParallelAnimation {
+                            NumberAnimation { target: popoutRect; property: "blurValue"; duration: AnimationConfig.durationFast; easing.type: AnimationConfig.easingDefaultOut }
+                            NumberAnimation { target: contentColumn; property: "opacity"; duration: AnimationConfig.durationVerySlow; easing.type: AnimationConfig.easingDefaultOut }
+                            NumberAnimation { target: contentColumn; property: "scale"; duration: AnimationConfig.durationExtraSlow; easing.type: AnimationConfig.easingSpringOut; easing.amplitude: AnimationConfig.springAmplitudePopout; easing.period: AnimationConfig.springPeriodPopoutScale }
+                        }
                     }
                 }
             },
@@ -90,23 +101,29 @@ Item {
                 SequentialAnimation {
                     // Фаза 1: контент исчезает, попап сжимается в кружок и поднимается
                     ParallelAnimation {
-                        NumberAnimation { target: contentColumn; property: "opacity"; duration: 100; easing.type: Easing.InQuad }
-                        NumberAnimation { target: contentColumn; property: "scale"; duration: 150; easing.type: Easing.InQuad }
-                        NumberAnimation { target: popoutRect; property: "width"; to: 36; duration: 180; easing.type: Easing.InQuad }
-                        NumberAnimation { target: popoutRect; property: "x"; to: root.originX - 18; duration: 180; easing.type: Easing.InQuad }
-                        NumberAnimation { target: popoutRect; property: "height"; to: 36; duration: 180; easing.type: Easing.InQuad }
-                        NumberAnimation { target: popoutRect; property: "y"; to: popoutRect.targetCenterY/3; duration: 180; easing.type: Easing.InQuad }
-                        NumberAnimation { target: popoutRect; property: "blurValue"; to: 0.8; duration: 150; easing.type: Easing.InQuad }
+                        ParallelAnimation {
+                            NumberAnimation { target: contentColumn; property: "opacity"; duration: AnimationConfig.durationUltraFast; easing.type: AnimationConfig.easingDefaultIn }
+                            NumberAnimation { target: contentColumn; property: "scale"; duration: AnimationConfig.durationVeryFast; easing.type: AnimationConfig.easingDefaultIn }
+                        }
+                        ParallelAnimation {
+                            NumberAnimation { target: popoutRect; property: "width"; to: root.bubbleDiameter; duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultIn }
+                            NumberAnimation { target: popoutRect; property: "x"; to: popoutRect.collapsedX; duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultIn }
+                            NumberAnimation { target: popoutRect; property: "height"; to: root.bubbleDiameter; duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultIn }
+                            NumberAnimation { target: popoutRect; property: "y"; to: popoutRect.collapseLiftY; duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultIn }
+                            NumberAnimation { target: popoutRect; property: "blurValue"; to: 0.8; duration: AnimationConfig.durationVeryFast; easing.type: AnimationConfig.easingDefaultIn }
+                        }
                     }
                     // Фаза 2: кружок поднимается к иконке
-                    NumberAnimation { target: popoutRect; property: "y"; to: 0; duration: 20; easing.type: Easing.InQuad }
+                    NumberAnimation { target: popoutRect; property: "y"; to: 0; duration: AnimationConfig.durationTiny; easing.type: AnimationConfig.easingDefaultIn }
                     // Фаза 3: кружок исчезает
                     ParallelAnimation {
-                        NumberAnimation { target: popoutRect; property: "y"; to: 0; duration: 20; easing.type: Easing.OutQuad }
-                        NumberAnimation { target: popoutRect; property: "width"; duration: 30; easing.type: Easing.InQuad }
-                        NumberAnimation { target: popoutRect; property: "x"; to: root.originX; duration: 30; easing.type: Easing.InQuad }
-                        NumberAnimation { target: popoutRect; property: "height"; duration: 100; easing.type: Easing.InQuad }
-                        NumberAnimation { target: popoutRect; property: "blurValue"; duration: 100; easing.type: Easing.InQuad }
+                        ParallelAnimation {
+                            NumberAnimation { target: popoutRect; property: "y"; to: 0; duration: AnimationConfig.durationTiny; easing.type: AnimationConfig.easingDefaultOut }
+                            NumberAnimation { target: popoutRect; property: "width"; duration: AnimationConfig.durationStep; easing.type: AnimationConfig.easingDefaultIn }
+                            NumberAnimation { target: popoutRect; property: "x"; to: root.originX; duration: AnimationConfig.durationStep; easing.type: AnimationConfig.easingDefaultIn }
+                            NumberAnimation { target: popoutRect; property: "height"; duration: AnimationConfig.durationUltraFast; easing.type: AnimationConfig.easingDefaultIn }
+                        }
+                        NumberAnimation { target: popoutRect; property: "blurValue"; duration: AnimationConfig.durationUltraFast; easing.type: AnimationConfig.easingDefaultIn }
                     }
                 }
             }
@@ -118,7 +135,7 @@ Item {
         layer.enabled: blurValue > 0
         layer.effect: MultiEffect {
             blurEnabled: true
-            blurMax: 50
+            blurMax: AnimationConfig.blurMaxHeavy
             blur: popoutRect.blurValue
         }
         
@@ -130,8 +147,8 @@ Item {
             ColumnLayout {
                 id: contentColumn
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
+                anchors.margins: root.contentPadding
+                spacing: Theme.spacingDefault
                 
                 opacity: 0.0
                 scale: 0.95
@@ -140,7 +157,7 @@ Item {
                 ColumnLayout {
                     id: contentLayout
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: Theme.spacingDefault
                 }
             }
         }

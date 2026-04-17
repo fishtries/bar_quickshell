@@ -6,9 +6,10 @@ import "../core"
 Item {
     id: root
 
-    property var allNotifications: NotificationState.activeNotifications.values
+    property var allNotifications: NotificationState.unpresentedNotifications
     property var islandNotification: null
     property string expandedAppName: ""
+    property bool isFadingOut: false
 
     readonly property int cardWidth: 280
     readonly property int cardHeight: 56
@@ -60,9 +61,12 @@ Item {
         expandedAppName = expandedAppName === appName ? "" : appName
     }
 
+    readonly property var groups: buildGroups()
+    property var displayGroups: groups
+
     implicitWidth: cardWidth
     implicitHeight: {
-        var groups = buildGroups()
+        var groups = root.displayGroups
         if (groups.length === 0)
             return 0
 
@@ -85,7 +89,30 @@ Item {
         return h
     }
 
-    visible: implicitHeight > 0
+    opacity: isFadingOut ? 0.0 : 1.0
+    visible: (displayGroups.length > 0) || isFadingOut
+    Behavior on opacity { NumberAnimation { duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingDefaultOut } }
+
+    onGroupsChanged: {
+        if (groups.length > 0) {
+            displayGroups = groups
+            fadeOutTimer.stop()
+            isFadingOut = false
+        } else if (displayGroups.length > 0 && !isFadingOut) {
+            isFadingOut = true
+            fadeOutTimer.restart()
+        }
+    }
+
+    Timer {
+        id: fadeOutTimer
+        interval: AnimationConfig.durationModerate
+        repeat: false
+        onTriggered: {
+            root.displayGroups = []
+            root.isFadingOut = false
+        }
+    }
 
     Column {
         id: cardList
@@ -101,7 +128,7 @@ Item {
         }
 
         Repeater {
-            model: root.buildGroups()
+            model: root.displayGroups
 
             Item {
                 id: cardRoot
@@ -116,14 +143,20 @@ Item {
                 property var notifItems: modelData.notifications
                 property bool expanded: root.expandedAppName === grpAppName
                 readonly property int expandedHeight: (notifItems.length * root.cardHeight) + (Math.max(0, notifItems.length - 1) * root.spacing)
+                property real entryOffsetY: appeared ? 0 : -18
 
                 opacity: appeared ? 1.0 : 0.0
                 scale: appeared ? 1.0 : 0.92
                 Component.onCompleted: appeared = true
                 Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutQuad } }
                 Behavior on scale { NumberAnimation { duration: 360; easing.type: Easing.OutBack } }
+                Behavior on entryOffsetY { NumberAnimation { duration: 360; easing.type: Easing.OutQuint } }
                 Behavior on height { NumberAnimation { duration: 360; easing.type: Easing.OutQuad } }
                 Behavior on y { NumberAnimation { duration: 360; easing.type: Easing.OutQuad } }
+
+                transform: Translate {
+                    y: cardRoot.entryOffsetY
+                }
 
                 Item {
                     visible: isStacked

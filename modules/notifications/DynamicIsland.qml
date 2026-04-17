@@ -34,8 +34,8 @@ PanelWindow {
     readonly property int compactWidth: 160
     readonly property int compactHeight: 36
     readonly property int expandedWidth: 360
-    readonly property int compactRadius: 18
-    readonly property int expandedRadius: 24
+    readonly property int compactRadius: AnimationConfig.radiusIslandCompact
+    readonly property int expandedRadius: AnimationConfig.radiusIslandExpanded
     readonly property int horizontalPadding: 14
     readonly property int verticalPadding: 10
     readonly property int detailSpacing: 8
@@ -112,7 +112,7 @@ PanelWindow {
 
     Timer {
         id: expandTimer
-        interval: 700
+        interval: AnimationConfig.timerIslandExpand
         repeat: false
         onTriggered: {
             if (root.visualState === "compact") {
@@ -124,7 +124,7 @@ PanelWindow {
 
     Timer {
         id: autoHideTimer
-        interval: 9000
+        interval: AnimationConfig.timerIslandAutoHide
         repeat: false
         onTriggered: {
             if (root.currentNotification) {
@@ -159,41 +159,41 @@ PanelWindow {
 
             Behavior on width {
                 NumberAnimation {
-                    duration: 450
-                    easing.type: Easing.OutElastic
-                    easing.period: 0.6
-                    easing.amplitude: 0.9
+                    duration: AnimationConfig.durationIslandSpring
+                    easing.type: AnimationConfig.easingSpringOut
+                    easing.period: AnimationConfig.springPeriodIsland
+                    easing.amplitude: AnimationConfig.springAmplitudeIsland
                 }
             }
 
             Behavior on height {
                 NumberAnimation {
-                    duration: 450
-                    easing.type: Easing.OutElastic
-                    easing.period: 0.6
-                    easing.amplitude: 0.9
+                    duration: AnimationConfig.durationIslandSpring
+                    easing.type: AnimationConfig.easingSpringOut
+                    easing.period: AnimationConfig.springPeriodIsland
+                    easing.amplitude: AnimationConfig.springAmplitudeIsland
                 }
             }
 
             Behavior on radius {
                 NumberAnimation {
-                    duration: 450
-                    easing.type: Easing.OutElastic
-                    easing.period: 0.6
-                    easing.amplitude: 0.9
+                    duration: AnimationConfig.durationIslandSpring
+                    easing.type: AnimationConfig.easingSpringOut
+                    easing.period: AnimationConfig.springPeriodIsland
+                    easing.amplitude: AnimationConfig.springAmplitudeIsland
                 }
             }
 
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 220
-                    easing.type: Easing.OutQuad
+                    duration: AnimationConfig.durationIslandFade
+                    easing.type: AnimationConfig.easingDefaultOut
                 }
             }
 
             Behavior on border.color {
                 ColorAnimation {
-                    duration: 180
+                    duration: AnimationConfig.durationQuick
                 }
             }
 
@@ -273,15 +273,15 @@ PanelWindow {
 
                     Behavior on height {
                         NumberAnimation {
-                            duration: 220
-                            easing.type: Easing.OutQuad
+                            duration: AnimationConfig.durationIslandFade
+                            easing.type: AnimationConfig.easingDefaultOut
                         }
                     }
 
                     Behavior on opacity {
                         NumberAnimation {
-                            duration: 180
-                            easing.type: Easing.OutQuad
+                            duration: AnimationConfig.durationQuick
+                            easing.type: AnimationConfig.easingDefaultOut
                         }
                     }
 

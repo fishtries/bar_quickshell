@@ -6,7 +6,7 @@ QtObject {
 
     // Цвета
     property color bgPanel: Qt.rgba(0.05, 0.05, 0.05, 0.15)
-    property color bgPopout: Qt.rgba(0.05, 0.05, 0.05, 0.9)
+    property color bgPopout: Qt.rgba(0, 0, 0, 1)
     property color bgActive: Qt.rgba(0, 0, 0, 0.28)
     property color bgHover: Qt.rgba(1, 1, 1, 0.08)
     

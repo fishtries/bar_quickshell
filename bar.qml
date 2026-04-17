@@ -65,70 +65,33 @@ PanelWindow {
             anchors.centerIn: parent
             spacing: 20
 
-            ActiveTitleModule {
+            AnimatedBarItem {
                 anchors.verticalCenter: parent.verticalCenter
-                opacity: IslandState.isActive ? 0 : 1
-                scale: IslandState.isActive ? 0.1 : 1.0
-                transform: Translate {
-                    x: IslandState.isActive ? 100 : 0
-                    Behavior on x { NumberAnimation { duration: 800; easing.type: Easing.OutQuint } }
-                }
-                Behavior on opacity { NumberAnimation { duration: 400 } }
-                Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.Elastic; easing.period: 0.5 } }
+                triggerState: IslandState.isActive
+                slideOffsetX: 100
+                opacityDuration: AnimationConfig.durationModerate
 
-                layer.enabled: IslandState.isActive
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blurMax: 32
-                    blur: IslandState.isActive ? 1.0 : 0.0
-                    Behavior on blur { NumberAnimation { duration: 400 } }
-                }
+                ActiveTitleModule {}
             }
 
             WorkspacesModule {
                 interactionEnabled: !mathModule.isActive
             }
 
-            MathModule { 
-                id: mathModule 
-                opacity: IslandState.isActive ? 0 : 1
-                scale: IslandState.isActive ? 0.1 : 1.0
-                transform: Translate {
-                    x: IslandState.isActive ? -100 : 0
-                    Behavior on x { NumberAnimation { duration: 800; easing.type: Easing.OutQuint } }
-                }
-                Behavior on opacity { NumberAnimation { duration: 200 } }
-                Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.Elastic; easing.period: 0.5 } }
+            AnimatedBarItem {
+                anchors.verticalCenter: parent.verticalCenter
+                triggerState: IslandState.isActive
+                slideOffsetX: -100
 
-                layer.enabled: IslandState.isActive
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blurMax: 32
-                    blur: IslandState.isActive ? 1.0 : 0.0
-                    Behavior on blur { NumberAnimation { duration: 400 } }
+                MathModule {
+                    id: mathModule
                 }
             }
             
-            Item {
-                width: audioVis.implicitWidth
-                height: audioVis.implicitHeight
+            AnimatedBarItem {
                 anchors.verticalCenter: parent.verticalCenter
-                opacity: IslandState.isActive ? 0 : 1
-                scale: IslandState.isActive ? 0.1 : 1.0
-                transform: Translate {
-                    x: IslandState.isActive ? -150 : 0
-                    Behavior on x { NumberAnimation { duration: 800; easing.type: Easing.OutQuint } }
-                }
-                Behavior on opacity { NumberAnimation { duration: 200 } }
-                Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.Elastic; easing.period: 0.5 } }
-                
-                layer.enabled: IslandState.isActive
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blurMax: 32
-                    blur: IslandState.isActive ? 1.0 : 0.0
-                    Behavior on blur { NumberAnimation { duration: 400 } }
-                }
+                triggerState: IslandState.isActive
+                slideOffsetX: -150
 
                 CavaVisualizer { id: audioVis }
             }
@@ -141,17 +104,20 @@ PanelWindow {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 12
 
-            VolumeModule { 
-                id: volModule 
+            AnimatedBarItem {
                 anchors.verticalCenter: parent.verticalCenter
-                opacity: ccModule.isNotifIsland ? 0 : 1
-                scale: ccModule.isNotifIsland ? 0.5 : 1.0
-                transform: Translate {
-                    x: ccModule.isNotifIsland ? 60 : 0
-                    Behavior on x { NumberAnimation { duration: 600; easing.type: Easing.OutQuint } }
+                triggerState: ccModule.isNotifIsland
+                slideOffsetX: 60
+                hiddenScale: 0.5
+                enableBlur: false
+                slideDuration: AnimationConfig.durationSlow
+                opacityDuration: AnimationConfig.durationNormal
+                scaleDuration: AnimationConfig.durationModerate
+                scaleEasingType: AnimationConfig.easingSpringOut
+
+                VolumeModule {
+                    id: volModule
                 }
-                Behavior on opacity { NumberAnimation { duration: 300 } }
-                Behavior on scale { NumberAnimation { duration: 400; easing.type: Easing.OutElastic; easing.period: 0.5 } }
             }
 
             // Control Center
@@ -179,7 +145,7 @@ PanelWindow {
             var islandBottom = 32 + islandH / 2 + translateY
             return islandBottom + 8
         }
-        Behavior on y { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
+        Behavior on y { NumberAnimation { duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingDefaultOut } }
         islandNotification: ccModule.currentNotification
     }
 
