@@ -67,7 +67,7 @@ Item {
     implicitWidth: cardWidth
     implicitHeight: {
         var groups = root.displayGroups
-        if (groups.length === 0)
+        if (!groups || groups.length === 0)
             return 0
 
         var h = 0
@@ -90,7 +90,7 @@ Item {
     }
 
     opacity: isFadingOut ? 0.0 : 1.0
-    visible: (displayGroups.length > 0) || isFadingOut
+    visible: (displayGroups && displayGroups.length > 0) || isFadingOut
     Behavior on opacity { NumberAnimation { duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingDefaultOut } }
 
     onGroupsChanged: {
@@ -98,7 +98,7 @@ Item {
             displayGroups = groups
             fadeOutTimer.stop()
             isFadingOut = false
-        } else if (displayGroups.length > 0 && !isFadingOut) {
+        } else if (displayGroups && displayGroups.length > 0 && !isFadingOut) {
             isFadingOut = true
             fadeOutTimer.restart()
         }

@@ -105,10 +105,116 @@ def do_check():
     except Exception as e:
          print(json.dumps({"status": "error", "error": str(e)}))
 
+def update_stats(added_chars, added_formulas):
+    STATS_FILE = os.path.expanduser("~/.config/quickshell/data/math_stats.json")
+    os.makedirs(os.path.dirname(STATS_FILE), exist_ok=True)
+    
+    stats = {
+        "total_chars": 0,
+        "total_formulas": 0,
+        "sessions_completed": 0,
+        "streak_days": 0,
+        "last_session_date": "",
+        "history": {}
+    }
+    
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, "r", encoding="utf-8") as f:
+                stats.update(json.load(f))
+        except:
+            pass
+            
+    if "history" not in stats:
+        stats["history"] = {}
+            
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    if stats["last_session_date"] == today_str:
+        pass
+    else:
+        if stats["last_session_date"]:
+            try:
+                last_date = datetime.strptime(stats["last_session_date"], "%Y-%m-%d")
+                today_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                diff = (today_date - last_date).days
+                if diff == 1:
+                    stats["streak_days"] += 1
+                else:
+                    stats["streak_days"] = 1
+            except ValueError:
+                stats["streak_days"] = 1
+        else:
+            stats["streak_days"] = 1
+            
+    stats["last_session_date"] = today_str
+    stats["total_chars"] += added_chars
+    stats["total_formulas"] += added_formulas
+    stats["sessions_completed"] += 1
+    
+    if today_str not in stats["history"]:
+        stats["history"][today_str] = {"chars": 0, "formulas": 0}
+        
+    stats["history"][today_str]["chars"] += added_chars
+    stats["history"][today_str]["formulas"] += added_formulas
+    
+    with open(STATS_FILE, "w", encoding="utf-8") as f:
+        json.dump(stats, f, indent=4)
+        
+    return stats
+
+def do_complete():
+    try:
+        file_path = get_target_file()
+        
+        if not os.path.exists(SNAPSHOT_FILE):
+             print(json.dumps({"error": "Snapshot not found in /tmp. Run script with --sync first."}))
+             return
+            
+        with open(file_path, "r", encoding="utf-8") as f:
+            current_content = f.read()
+            
+        with open(SNAPSHOT_FILE, "r", encoding="utf-8") as f:
+            snapshot_content = f.read()
+            
+        added_symbols = max(0, len(current_content) - len(snapshot_content))
+        
+        latex_patterns = [r'\$', r'\\int', r'\\lim']
+        
+        def count_formulas(content):
+            count = 0
+            for pattern in latex_patterns:
+                # To prevent overlapping matches or infinite loops, use len(findall)
+                try:
+                    count += len(re.findall(pattern, content))
+                except re.error:
+                    pass
+            return count
+            
+        current_formulas = count_formulas(current_content)
+        snapshot_formulas = count_formulas(snapshot_content)
+        added_formulas = max(0, current_formulas - snapshot_formulas)
+        
+        stats = update_stats(added_symbols, added_formulas)
+        
+        if os.path.exists(SNAPSHOT_FILE):
+            os.remove(SNAPSHOT_FILE)
+            
+        result = {
+            "status": "success",
+            "message": "Session completed.",
+            "stats": stats
+        }
+        
+        print(json.dumps(result))
+    except Exception as e:
+         print(json.dumps({"status": "error", "error": str(e)}))
+
 def main():
     parser = argparse.ArgumentParser(description="Math Notes Validator")
     parser.add_argument("--sync", action="store_true", help="Создать копию текущего файла в /tmp/")
     parser.add_argument("--check", action="store_true", help="Сравнить файл с копией и вывести статистику в формате JSON")
+    parser.add_argument("--complete", action="store_true", help="Завершить сессию, обновить статистику и удалить /tmp/math_snapshot.md")
     
     args = parser.parse_args()
     
@@ -116,6 +222,8 @@ def main():
         do_sync()
     elif args.check:
         do_check()
+    elif args.complete:
+        do_complete()
     else:
         parser.print_help()
 

@@ -58,9 +58,28 @@ Rectangle {
     }
 
     // ─── Notification tracking ─────────────────────────────────────────
-    // Island shows the LATEST notification only.
-    // Remaining notifications are shown as cards below the island (in bar.qml).
-    // Presented tracking is centralized in NotificationState singleton.
+    // Queue-based notification display: unseen notifications are shown one-by-one
+    // in the island. After auto-hide or dismiss, the next unseen is shown.
+    // Already-seen notifications remain in Control Center but don't reappear in island.
+
+    property var unseenQueue: []
+
+    function showNextUnseen() {
+        if (root.unseenQueue.length > 0) {
+            root.currentNotification = root.unseenQueue.shift()
+            root.isNotifIsland = true
+            islandView.resetInteraction()
+            islandView.collapse()
+            islandView.resetSwipe()
+            islandView.restartAutoHide()
+        } else {
+            // Queue empty — hide island smoothly (don't null currentNotification
+            // immediately so exit animation plays without text jumps)
+            root.isNotifIsland = false
+            islandView.collapse()
+            islandView.stopAutoHide()
+        }
+    }
 
     ListView {
         id: notifTracker
@@ -73,6 +92,7 @@ Rectangle {
                 root.currentNotification = null
                 islandView.stopAutoHide()
                 root.isNotifIsland = false
+                root.unseenQueue = []
             }
         }
     }
@@ -81,14 +101,15 @@ Rectangle {
         target: NotificationState
         function onNewNotification(notification) {
             // If popout is open, don't show island — notification goes straight to the list
-            if (root.popoutOpen) {
-                return
+            if (root.popoutOpen) return
+
+            // Add to the end of the unseen queue
+            root.unseenQueue.push(notification)
+
+            // If island is hidden, start showing
+            if (!root.isNotifIsland) {
+                showNextUnseen()
             }
-            root.currentNotification = notification
-            islandView.resetInteraction()
-            root.isNotifIsland = true
-            islandView.restartAutoHide()
-            // New notification is implicitly un-presented; will be marked when auto-hide fires
         }
     }
 
@@ -103,7 +124,7 @@ Rectangle {
             islandView.stopAutoHide()
         } else {
             // When popout closes, don't re-show island for already-seen notifications.
-            // The island will activate again only when a NEW notification arrives (onNewNotification).
+            // The island will activate again only when a NEW notification arrives.
             root.currentNotification = null
         }
     }
@@ -128,21 +149,9 @@ Rectangle {
         onDismissRequested: root.dismissNotification()
         onAutoHideDismissRequested: root.dismissNotificationFromAutoHide()
         onHideRequested: {
-            // Mark current as presented, then find next un-presented notification
+            // Auto-hide without user interaction: mark as presented, show next from queue
             NotificationState.markPresented(root.currentNotification)
-            var next = NotificationState.findNextUnpresented(root.currentNotification)
-
-            if (next) {
-                root.currentNotification = next
-                islandView.resetInteraction()
-                islandView.restartAutoHide()
-            } else {
-                root.currentNotification = null
-                root.isNotifIsland = false
-                islandView.stopAutoHide()
-            }
-            islandView.collapse()
-            islandView.resetSwipe()
+            showNextUnseen()
         }
     }
 
@@ -154,43 +163,22 @@ Rectangle {
         var dismissed = root.currentNotification
         if (dismissed)
             dismissed.dismiss()
+        root.currentNotification = null
 
-        // Find next un-presented notification
-        var next = NotificationState.findNextUnpresented(dismissed)
-
-        if (next) {
-            root.currentNotification = next
-            islandView.resetInteraction()
-            islandView.restartAutoHide()
-        } else {
-            root.currentNotification = null
-            root.isNotifIsland = false
-            islandView.stopAutoHide()
-        }
         islandView.collapse()
         islandView.resetSwipe()
+        showNextUnseen()
     }
 
     function dismissNotificationFromAutoHide() {
         var dismissed = root.currentNotification
         if (dismissed)
             dismissed.dismiss()
-
-        // Find next un-presented notification
-        var next = NotificationState.findNextUnpresented(dismissed)
-
-        if (next) {
-            root.currentNotification = next
-            islandView.resetInteraction()
-            islandView.restartAutoHide()
-        } else {
-            root.currentNotification = null
-            root.isNotifIsland = false
-            islandView.stopAutoHide()
-        }
+        root.currentNotification = null
 
         islandView.collapse()
         islandView.resetSwipe()
+        showNextUnseen()
     }
 
     // Apply drag offset + visual feedback to the island content

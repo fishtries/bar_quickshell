@@ -11,9 +11,14 @@ Rectangle {
     
     // Morphing properties
     readonly property bool isIsland: IslandState.isActive
+    readonly property bool isReminderIsland: IslandState.isReminder
+    readonly property var currentReminder: IslandState.reminderData
+    readonly property int reminderIslandWidth: 780
+    readonly property int reminderIslandHeight: 118
     
     color: isIsland ? "#000000" : Theme.bgPanel
-    radius: isIsland ? 18 : Theme.radiusPanel
+    radius: isIsland ? (isReminderIsland ? 26 : 18) : Theme.radiusPanel
+    z: isIsland ? 100 : 0
     property bool interactionEnabled: true
     
     // Blur spike logic
@@ -26,11 +31,11 @@ Rectangle {
         NumberAnimation { target: root; property: "animBlur"; to: 0.0; duration: 300; easing.type: Easing.OutQuad }
     }
 
-    implicitWidth: isIsland ? 600 : (layout.implicitWidth + 12)
-    implicitHeight: isIsland ? 80 : (layout.implicitHeight + 14)
+    implicitWidth: isIsland ? (isReminderIsland ? reminderIslandWidth : 600) : (layout.implicitWidth + 12)
+    implicitHeight: isIsland ? (isReminderIsland ? reminderIslandHeight : 80) : (layout.implicitHeight + 14)
 
     transform: Translate {
-        y: root.isIsland ? 18 : 0
+        y: root.isIsland ? 28 : 0
         Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
     }
 
@@ -58,6 +63,21 @@ Rectangle {
         blurEnabled: true
         blurMax: 32
         blur: root.animBlur
+    }
+
+    Connections {
+        target: EventsState
+        function onReminderTriggered(reminder) {
+            if (reminder)
+                IslandState.showReminder(reminder)
+        }
+    }
+
+    Connections {
+        target: IslandState
+        function onReminderAutoActionRequested(reminder) {
+            root.resolveReminderAction("snooze", reminder)
+        }
     }
 
     ListModel { id: wsModel }
@@ -108,7 +128,34 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: updateModel()
+    function formatReminderTime(reminder) {
+        if (!reminder || !reminder.time || reminder.time.length === 0)
+            return "No time";
+
+        return `At ${reminder.time}`;
+    }
+
+    function resolveReminderAction(action, reminderOverride) {
+        let reminder = reminderOverride || IslandState.reminderData;
+        if (!reminder || EventsState.reminderActionBusy)
+            return;
+
+        if (action === "snooze") {
+            EventsState.snoozeReminder(reminder);
+        } else if (action === "tomorrow") {
+            EventsState.remindTomorrow(reminder);
+        } else if (action === "complete") {
+            EventsState.completeReminder(reminder);
+        }
+
+        IslandState.hide();
+    }
+
+    Component.onCompleted: {
+        updateModel()
+        if (EventsState.activeReminder)
+            IslandState.showReminder(EventsState.activeReminder)
+    }
 
     // ─── Content 1: Workspaces ──────────────────────────────────────
     RowLayout {
@@ -196,17 +243,156 @@ Rectangle {
         Behavior on opacity { NumberAnimation { duration: 400 } }
         Behavior on scale { NumberAnimation { duration: 600; easing.type: Easing.OutBack } }
 
-        AppIcon {
-            text: IslandState.sourceModule === "screenshot" ? "\udb81\udcf7" : "\uf00c"
-            font.pixelSize: 18
-            color: Theme.success
+        ColumnLayout {
+            visible: root.isReminderIsland
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                AppIcon {
+                    text: "\uf017"
+                    font.pixelSize: 20
+                    color: Theme.warning
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    AppText {
+                        Layout.fillWidth: true
+                        text: root.currentReminder ? root.currentReminder.title : "Reminder"
+                        color: "#ffffff"
+                        font { pixelSize: 15; weight: Font.Bold }
+                        elide: Text.ElideRight
+                    }
+
+                    AppText {
+                        Layout.fillWidth: true
+                        text: root.formatReminderTime(root.currentReminder)
+                        color: "#cccccc"
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    radius: 18
+                    color: snoozeMouse.pressed ? Qt.rgba(1, 1, 1, 0.18) : (snoozeMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.08))
+                    border.width: 1
+                    border.color: Qt.rgba(1, 1, 1, snoozeMouse.containsMouse ? 0.16 : 0.08)
+                    opacity: EventsState.reminderActionBusy ? 0.45 : 1.0
+
+                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Behavior on border.color { ColorAnimation { duration: 140 } }
+
+                    AppText {
+                        anchors.centerIn: parent
+                        text: "Remind in 5 min"
+                        color: "#ffffff"
+                        font { pixelSize: 12; weight: Font.DemiBold }
+                    }
+
+                    MouseArea {
+                        id: snoozeMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        enabled: !EventsState.reminderActionBusy
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.resolveReminderAction("snooze")
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    radius: 18
+                    color: tomorrowMouse.pressed ? Qt.rgba(1, 1, 1, 0.18) : (tomorrowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.08))
+                    border.width: 1
+                    border.color: Qt.rgba(1, 1, 1, tomorrowMouse.containsMouse ? 0.16 : 0.08)
+                    opacity: EventsState.reminderActionBusy ? 0.45 : 1.0
+
+                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Behavior on border.color { ColorAnimation { duration: 140 } }
+
+                    AppText {
+                        anchors.centerIn: parent
+                        text: "Remind tomorrow"
+                        color: "#ffffff"
+                        font { pixelSize: 12; weight: Font.DemiBold }
+                    }
+
+                    MouseArea {
+                        id: tomorrowMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        enabled: !EventsState.reminderActionBusy
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.resolveReminderAction("tomorrow")
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    radius: 18
+                    color: completeMouse.pressed ? Qt.rgba(1, 0.35, 0.35, 0.24) : (completeMouse.containsMouse ? Qt.rgba(1, 0.35, 0.35, 0.16) : Qt.rgba(1, 1, 1, 0.08))
+                    border.width: 1
+                    border.color: completeMouse.containsMouse ? Qt.rgba(1, 0.45, 0.45, 0.4) : Qt.rgba(1, 1, 1, 0.08)
+                    opacity: EventsState.reminderActionBusy ? 0.45 : 1.0
+
+                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Behavior on border.color { ColorAnimation { duration: 140 } }
+
+                    AppText {
+                        anchors.centerIn: parent
+                        text: "Mark as completed"
+                        color: "#ffffff"
+                        font { pixelSize: 12; weight: Font.DemiBold }
+                    }
+
+                    MouseArea {
+                        id: completeMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        enabled: !EventsState.reminderActionBusy
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.resolveReminderAction("complete")
+                    }
+                }
+            }
         }
 
-        AppText {
-            text: IslandState.sourceModule === "screenshot" ? "Screenshot Saved" : "Success"
-            color: "#ffffff"
-            font { pixelSize: 14; weight: Font.Medium }
+        RowLayout {
+            visible: !root.isReminderIsland
             Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 12
+
+            AppIcon {
+                text: IslandState.sourceModule === "screenshot" ? "\udb81\udcf7" : "\uf00c"
+                font.pixelSize: 18
+                color: Theme.success
+            }
+
+            AppText {
+                text: IslandState.sourceModule === "screenshot" ? "Screenshot Saved" : "Success"
+                color: "#ffffff"
+                font { pixelSize: 14; weight: Font.Medium }
+                Layout.fillWidth: true
+            }
         }
     }
 }

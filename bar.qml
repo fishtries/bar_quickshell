@@ -14,8 +14,15 @@ import "modules/controlcenter"
 import "modules/notifications"
 import "modules/volume"
 import "components"
+import "modules/vicinae"
 
 PanelWindow {
+    GlobalShortcut {
+        name: "toggle-vicinae"
+        description: "Toggle Vicinae launcher"
+        onPressed: vicinaeLauncher.toggleLauncher()
+    }
+
     anchors.top: true
     anchors.left: true
     anchors.right: true
@@ -36,6 +43,7 @@ PanelWindow {
     // Маска кликабельности: собираем только те области, которые реально заняты интерфейсом
     mask: Region {
         Region { item: layoutContainer }
+        Region { item: wsModule }
         Region { item: clockModule.popoutItem }
         Region { item: mathModule.popoutItem }
         Region { item: ccModule.popoutItem.maskItem }
@@ -75,6 +83,7 @@ PanelWindow {
             }
 
             WorkspacesModule {
+                id: wsModule
                 interactionEnabled: !mathModule.isActive
             }
 
@@ -147,6 +156,11 @@ PanelWindow {
         }
         Behavior on y { NumberAnimation { duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingDefaultOut } }
         islandNotification: ccModule.currentNotification
+    }
+
+    VicinaePopup {
+        id: vicinaeLauncher
+        visible: false
     }
 
     NotificationOverlay {}

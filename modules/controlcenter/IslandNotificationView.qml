@@ -99,11 +99,13 @@ Item {
         interval: AnimationConfig.timerNotifAutoHide
         repeat: false
         onTriggered: {
+            // Time expired — just move to next unseen or hide island.
+            // No .dismiss() here; notification stays in Control Center.
             if (!root.notifInteracted) {
                 root.hideRequested()
-                return
+            } else {
+                root.autoHideDismissRequested()
             }
-            root.autoHideDismissRequested()
         }
     }
 
@@ -146,20 +148,34 @@ Item {
                 Item {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
-                    implicitHeight: compactAppName.implicitHeight
+                    implicitHeight: compactTextCol.implicitHeight
                     layer.enabled: root.notifBlur > 0
                     layer.effect: MultiEffect {
                         blurEnabled: true
                         blurMax: AnimationConfig.blurMaxLight
                         blur: root.notifBlur
                     }
-                    AppText {
-                        id: compactAppName
+                    ColumnLayout {
+                        id: compactTextCol
                         anchors.fill: parent
-                        text: root.displayedNotification ? (root.displayedNotification.appName || "System") : ""
-                        color: "#ffffff"
-                        font { pixelSize: 14; weight: Font.DemiBold }
-                        elide: Text.ElideRight
+                        spacing: 1
+
+                        AppText {
+                            text: root.displayedNotification ? (root.displayedNotification.summary || "") : ""
+                            color: "#ffffff"
+                            font { pixelSize: 14; weight: Font.DemiBold }
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+
+                        AppText {
+                            text: root.displayedNotification ? (root.displayedNotification.body || "") : ""
+                            color: "#cccccc"
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                            visible: text !== ""
+                        }
                     }
                 }
 

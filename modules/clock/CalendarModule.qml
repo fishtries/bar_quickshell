@@ -8,6 +8,7 @@ Item {
     
     implicitWidth: 260
     implicitHeight: 280
+    signal daySelected(string dateKey, bool hasEvents)
     
     // Внутреннее состояние выбранного месяца/года (по умолчанию текущие)
     property int viewMonth: TimeState.month
@@ -17,6 +18,7 @@ Item {
     property int selectedDay: TimeState.day
     property int selectedMonth: TimeState.month
     property int selectedYear: TimeState.year
+    readonly property string selectedDateKey: EventsState.dateKey(root.selectedDay, root.selectedMonth, root.selectedYear)
     
     // Названия месяцев (в QML лучше брать через Qt.formatDate)
     function getMonthName(m, y) {
@@ -134,6 +136,7 @@ Item {
                                                      modelData.year === root.selectedYear
                     
                     readonly property bool isCurrentMonth: modelData.month === root.viewMonth
+                    readonly property bool hasEvents: EventsState.hasEventsForDate(modelData.day, modelData.month, modelData.year)
                     
                     
                     // Фон (подсветка выбранного дня / сегодняшнего)
@@ -168,6 +171,18 @@ Item {
                         }
                     }
 
+                    Rectangle {
+                        visible: hasEvents
+                        width: 4
+                        height: 4
+                        radius: 2
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 4
+                        color: isSelected ? Theme.info : Theme.textSecondary
+                        opacity: isCurrentMonth ? 0.95 : 0.4
+                    }
+
 
                     HoverHandler { id: dayHover }
                     
@@ -177,6 +192,8 @@ Item {
                             root.selectedDay = modelData.day;
                             root.selectedMonth = modelData.month;
                             root.selectedYear = modelData.year;
+                            let dateKey = EventsState.dateKey(modelData.day, modelData.month, modelData.year);
+                            root.daySelected(dateKey, EventsState.hasEventsForKey(dateKey));
                             
                             
                             // Если кликнули на день из другого месяца, перелистываем туда

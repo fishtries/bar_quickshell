@@ -26,7 +26,7 @@ QtObject {
     property int spacingSmall: 8
 
     // Шрифты
-    property string fontPrimary: "Outfit" // предполагаемый дефолт
+    property string fontPrimary: "SF Pro Display" // предполагаемый дефолт
     property string fontClock: "MariosBlack"
     property string fontIcon: "JetBrainsMono Nerd Font"
 }

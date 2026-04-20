@@ -1,0 +1,8 @@
+singleton SearchState SearchState.qml
+VicinaePopup VicinaePopup.qml
+VicinaeInput VicinaeInput.qml
+VicinaeResultsList VicinaeResultsList.qml
+VicinaeResultItem VicinaeResultItem.qml
+VicinaeCalculatorItem VicinaeCalculatorItem.qml
+VicinaeSectionHeader VicinaeSectionHeader.qml
+VicinaeFooter VicinaeFooter.qml

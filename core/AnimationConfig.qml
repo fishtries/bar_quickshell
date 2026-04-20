@@ -41,7 +41,7 @@ QtObject {
     readonly property int easingDefaultInOut: Easing.InOutQuad
     readonly property int easingMovement: Easing.OutQuint
     readonly property int easingMovementInOut: Easing.InOutQuint
-    readonly property int easingSpring: Easing.Elastic
+    readonly property int easingSpring: Easing.OutElastic
     readonly property int easingSpringOut: Easing.OutElastic
     readonly property int easingOvershootOut: Easing.OutBack
     readonly property int easingSmoothOut: Easing.OutSine
