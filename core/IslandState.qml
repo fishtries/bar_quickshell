@@ -31,6 +31,11 @@ Item {
         root.reminderData = null
     }
 
+    function restart() {
+        if (root.isActive)
+            resetTimer.restart()
+    }
+
     function trigger(source = "screenshot") {
         root.sourceModule = source
         root.reminderData = null

@@ -8,5 +8,6 @@ singleton EventsState state/EventsState.qml
 singleton NotificationState state/NotificationState.qml
 singleton LocalSendState state/LocalSendState.qml
 singleton IslandState IslandState.qml
+singleton TodoState state/TodoState.qml
 
 singleton AnimationConfig AnimationConfig.qml

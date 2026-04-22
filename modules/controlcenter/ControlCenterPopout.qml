@@ -449,217 +449,63 @@ PopoutWrapper {
                     color: Qt.rgba(1, 1, 1, 0.1)
                 }
 
-                RowLayout {
+                AppText {
+                    text: MathState.isActive ? "Session is currently active." : "Starting a session will enable focus mode:"
+                    color: Theme.textSecondary
+                    font.pixelSize: 13
                     Layout.fillWidth: true
-                    spacing: 16
+                    wrapMode: Text.WordWrap
+                }
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        spacing: 12
+                ColumnLayout {
+                    spacing: 6
+                    visible: !MathState.isActive
+                    
+                    RowLayout {
+                        spacing: 8
+                        Text { text: "•"; color: "#55ff55"; font.bold: true }
+                        Text { text: "Block YouTube & distractions"; color: "#e0e0e0"; font.pixelSize: 12 }
+                    }
+                    RowLayout {
+                        spacing: 8
+                        Text { text: "•"; color: "#55ff55"; font.bold: true }
+                        Text { text: "Enable MATH submap (Hyprland)"; color: "#e0e0e0"; font.pixelSize: 12 }
+                    }
+                    RowLayout {
+                        spacing: 8
+                        Text { text: "•"; color: "#55ff55"; font.bold: true }
+                        Text { text: "Start focus music (MPV)"; color: "#e0e0e0"; font.pixelSize: 12 }
+                    }
+                }
 
-                        AppText {
-                            text: MathState.isActive ? "Session is currently active." : "Starting a session will enable focus mode:"
-                            color: Theme.textSecondary
-                            font.pixelSize: 13
-                            Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                        }
-
-                        ColumnLayout {
-                            spacing: 6
-                            visible: !MathState.isActive
-                            
-                            RowLayout {
-                                spacing: 8
-                                Text { text: "•"; color: "#55ff55"; font.bold: true }
-                                Text { text: "Block YouTube & distractions"; color: "#e0e0e0"; font.pixelSize: 12 }
-                            }
-                            RowLayout {
-                                spacing: 8
-                                Text { text: "•"; color: "#55ff55"; font.bold: true }
-                                Text { text: "Enable MATH submap (Hyprland)"; color: "#e0e0e0"; font.pixelSize: 12 }
-                            }
-                            RowLayout {
-                                spacing: 8
-                                Text { text: "•"; color: "#55ff55"; font.bold: true }
-                                Text { text: "Start focus music (MPV)"; color: "#e0e0e0"; font.pixelSize: 12 }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: 40
-                            radius: 20
-                            color: mathPageBtnMouse.containsMouse ? (MathState.isActive ? Qt.rgba(1, 0, 0, 0.15) : Qt.rgba(0, 1, 0, 0.15)) : Qt.rgba(1, 1, 1, 0.08)
-                            border.color: mathPageBtnMouse.containsMouse ? (MathState.isActive ? Qt.rgba(1, 0, 0, 0.3) : Qt.rgba(0, 1, 0, 0.3)) : "transparent"
-                            border.width: 1
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            
-                            AppText {
-                                anchors.centerIn: parent
-                                text: MathState.isActive ? "Посмотреть статистику о текущей сессии" : "Start New Session"
-                                color: mathPageBtnMouse.containsMouse ? (MathState.isActive ? Theme.info : Theme.success) : Theme.textPrimary
-                                font { pixelSize: MathState.isActive ? 11 : 14; bold: true }
-                            }
-
-                            MouseArea {
-                                id: mathPageBtnMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (MathState.isActive) {
-                                        root.requestMathDetails();
-                                        root.closeRequested();
-                                    } else {
-                                        MathState.startSession()
-                                        root.currentPage = "grid"
-                                    }
-                                }
-                            }
-                        }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 40
+                    radius: 20
+                    color: mathPageBtnMouse.containsMouse ? (MathState.isActive ? Qt.rgba(1, 0, 0, 0.15) : Qt.rgba(0, 1, 0, 0.15)) : Qt.rgba(1, 1, 1, 0.08)
+                    border.color: mathPageBtnMouse.containsMouse ? (MathState.isActive ? Qt.rgba(1, 0, 0, 0.3) : Qt.rgba(0, 1, 0, 0.3)) : "transparent"
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    
+                    AppText {
+                        anchors.centerIn: parent
+                        text: MathState.isActive ? "Посмотреть статистику о текущей сессии" : "Start New Session"
+                        color: mathPageBtnMouse.containsMouse ? (MathState.isActive ? Theme.info : Theme.success) : Theme.textPrimary
+                        font { pixelSize: MathState.isActive ? 11 : 14; bold: true }
                     }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        Layout.preferredWidth: 1
-                        radius: 12
-                        color: Qt.rgba(1, 1, 1, 0.05)
-                        border.color: Qt.rgba(1, 1, 1, 0.08)
-                        border.width: 1
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 12
-                            spacing: 8
-
-                            AppText {
-                                text: "Focus Statistics"
-                                color: Theme.textPrimary
-                                font { pixelSize: 14; bold: true }
-                                Layout.bottomMargin: 4
-                            }
-
-                            GridLayout {
-                                columns: 2
-                                columnSpacing: 16
-                                rowSpacing: 8
-                                Layout.fillWidth: true
-
-                                AppText { text: "Sessions:"; color: Theme.textSecondary; font.pixelSize: 12 }
-                                AppText { text: MathState.sessionsCompleted; color: Theme.success; font { pixelSize: 13; bold: true } }
-
-                                AppText { text: "Streak:"; color: Theme.textSecondary; font.pixelSize: 12 }
-                                AppText { text: MathState.streakDays + " 🔥"; color: "#ffa500"; font { pixelSize: 13; bold: true } }
-
-                                AppText { text: "Total Chars:"; color: Theme.textSecondary; font.pixelSize: 12 }
-                                AppText { text: MathState.totalChars; color: Theme.info; font { pixelSize: 13; bold: true } }
-
-                                AppText { text: "Total Formulas:"; color: Theme.textSecondary; font.pixelSize: 12 }
-                                AppText { text: MathState.totalFormulas; color: Theme.info; font { pixelSize: 13; bold: true } }
-                            }
-
-                            Item { Layout.preferredHeight: 8 }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                AppText {
-                                    text: "Useful Work (7 days)"
-                                    color: Theme.textSecondary
-                                    font { pixelSize: 12; bold: true }
-                                }
-                                Item { Layout.fillWidth: true }
-                                AppText {
-                                    // Today's stats if available
-                                    text: MathState.historyData.length > 0 ? "+" + MathState.historyData[MathState.historyData.length-1].value : "0"
-                                    color: Theme.success
-                                    font { pixelSize: 12; bold: true }
-                                }
-                            }
-
-                            Canvas {
-                                id: chartCanvas
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-
-                                property var dataPoints: MathState.historyData
-                                onDataPointsChanged: requestPaint()
-
-                                onPaint: {
-                                    var ctx = getContext("2d");
-                                    ctx.clearRect(0, 0, width, height);
-
-                                    if (!dataPoints || dataPoints.length === 0) return;
-
-                                    var maxVal = 0;
-                                    for (var i = 0; i < dataPoints.length; i++) {
-                                        if (dataPoints[i].value > maxVal) maxVal = dataPoints[i].value;
-                                    }
-                                    if (maxVal === 0) maxVal = 100;
-
-                                    var bottomMargin = 15;
-                                    var topMargin = 5;
-                                    var graphHeight = height - bottomMargin - topMargin;
-                                    var xStep = width / Math.max(1, dataPoints.length - 1);
-
-                                    var pts = [];
-                                    for (var i = 0; i < dataPoints.length; i++) {
-                                        pts.push({
-                                            x: i * xStep,
-                                            y: topMargin + graphHeight - ((dataPoints[i].value / maxVal) * graphHeight)
-                                        });
-                                    }
-
-                                    // Area gradient fill
-                                    var grad = ctx.createLinearGradient(0, topMargin, 0, height - bottomMargin);
-                                    grad.addColorStop(0, Qt.rgba(0.3, 0.8, 1.0, 0.25));
-                                    grad.addColorStop(1, Qt.rgba(0.3, 0.8, 1.0, 0.0));
-                                    ctx.fillStyle = grad;
-
-                                    ctx.beginPath();
-                                    ctx.moveTo(pts[0].x, height - bottomMargin);
-                                    for (var i = 0; i < pts.length; i++) {
-                                        ctx.lineTo(pts[i].x, pts[i].y);
-                                    }
-                                    ctx.lineTo(pts[pts.length-1].x, height - bottomMargin);
-                                    ctx.fill();
-
-                                    // Line
-                                    ctx.lineWidth = 2;
-                                    ctx.strokeStyle = "#55aaff";
-                                    ctx.lineJoin = "round";
-                                    
-                                    ctx.beginPath();
-                                    ctx.moveTo(pts[0].x, pts[0].y);
-                                    for (var i = 1; i < pts.length; i++) {
-                                        ctx.lineTo(pts[i].x, pts[i].y);
-                                    }
-                                    ctx.stroke();
-
-                                    // Points
-                                    ctx.fillStyle = "#ffffff";
-                                    for (var i = 0; i < pts.length; i++) {
-                                        ctx.beginPath();
-                                        ctx.arc(pts[i].x, pts[i].y, 2.5, 0, 2 * Math.PI);
-                                        ctx.fill();
-                                    }
-
-                                    // Labels
-                                    ctx.fillStyle = "#888888";
-                                    ctx.font = "10px sans-serif";
-                                    var days = ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"];
-                                    for (var i = 0; i < dataPoints.length; i++) {
-                                        var dateObj = new Date(dataPoints[i].date);
-                                        var dayName = days[dateObj.getDay()];
-                                        var txtW = ctx.measureText(dayName).width;
-                                        var lx = pts[i].x - txtW/2;
-                                        if (i === 0) lx = 0;
-                                        if (i === dataPoints.length - 1) lx = width - txtW;
-                                        ctx.fillText(dayName, lx, height - 2);
-                                    }
-                                }
+                    MouseArea {
+                        id: mathPageBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (MathState.isActive) {
+                                root.requestMathDetails();
+                                root.closeRequested();
+                            } else {
+                                MathState.startSession()
+                                root.currentPage = "grid"
                             }
                         }
                     }

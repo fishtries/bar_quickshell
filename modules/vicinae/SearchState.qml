@@ -20,6 +20,7 @@ Item {
     property var usageRegisterQueue: []
     property string pendingFileSearchQuery: ""
     property string activeFileSearchQuery: ""
+    property bool cancelingFileSearch: false
     property string statusMessage: ""
     readonly property string catalogScriptPath: "/home/fish/.config/quickshell/scripts/vicinae_catalog.py"
     readonly property string fileSearchScriptPath: "/home/fish/.config/quickshell/scripts/vicinae_file_search.py"
@@ -300,6 +301,37 @@ Item {
         return Math.log(1 + count) * (token === "" ? 14 : 6)
     }
 
+    function snapshotItem(item) {
+        if (!item)
+            return null
+
+        try {
+            return JSON.parse(JSON.stringify(item))
+        } catch (error) {
+            return {
+                "isSection": item.isSection === true,
+                "selectable": item.selectable === true,
+                "kind": item.kind || "result",
+                "sectionName": item.sectionName || item.section || "",
+                "title": item.title || "",
+                "subtitle": item.subtitle || "",
+                "iconText": item.iconText || "",
+                "accessoryText": item.accessoryText || "",
+                "accessoryColor": item.accessoryColor || "#55ccff",
+                "aliasText": item.aliasText || "",
+                "isActive": item.isActive === true,
+                "actionLabel": item.actionLabel || "Open",
+                "launchType": item.launchType || "",
+                "launchValue": item.launchValue || "",
+                "launchKey": item.launchKey || "",
+                "calcQuestion": item.calcQuestion || "",
+                "calcQuestionUnit": item.calcQuestionUnit || "",
+                "calcAnswer": item.calcAnswer || "",
+                "calcAnswerUnit": item.calcAnswerUnit || ""
+            }
+        }
+    }
+
     function processNextUsageRegistration() {
         if (usageRegisterQueue.length === 0 || usageRegisterProcess.running)
             return
@@ -376,23 +408,41 @@ Item {
         }
     }
 
+    function stopFileSearch(clearPendingResults) {
+        fileSearchDebounce.stop()
+
+        if (clearPendingResults) {
+            pendingFileSearchQuery = ""
+            activeFileSearchQuery = ""
+        }
+
+        fileResultsBuffer = []
+
+        if (fileSearchProcess.running) {
+            cancelingFileSearch = true
+            fileSearchProcess.running = false
+        } else {
+            loadingFiles = false
+        }
+    }
+
     function startFileSearch(searchQuery) {
         const trimmed = (searchQuery || "").trim()
         const normalized = normalizeText(trimmed)
 
         pendingFileSearchQuery = trimmed
 
-        if ((normalized.length < 2) && !trimmed.startsWith("/")) {
-            activeFileSearchQuery = ""
-            fileResultsBuffer = []
+        if ((normalized.length < 3) && !trimmed.startsWith("/")) {
+            stopFileSearch(true)
             fileResults = []
-            loadingFiles = false
             rebuildResults()
             return
         }
 
-        if (loadingFiles)
+        if (fileSearchProcess.running) {
+            stopFileSearch(false)
             return
+        }
 
         activeFileSearchQuery = trimmed
         fileResultsBuffer = []
@@ -419,45 +469,52 @@ Item {
     }
 
     function activateItem(item) {
-        if (!item || !item.selectable)
+        const launchItem = snapshotItem(item)
+
+        if (!launchItem || !launchItem.selectable)
             return false
 
         statusMessage = ""
-        registerItemUsage(item)
+        const launchType = launchItem.launchType || ""
+        const launchValue = launchItem.launchValue || ""
 
-        if (item.launchType === "copy") {
-            clipboardCopyProcess.command = ["wl-copy", item.launchValue || item.calcAnswer || ""]
+        if (launchType === "copy") {
+            clipboardCopyProcess.command = ["wl-copy", launchValue || launchItem.calcAnswer || ""]
             clipboardCopyProcess.running = true
-            resultActivated(item)
+            resultActivated(launchItem)
+            registerItemUsage(launchItem)
             closeRequested()
             return true
         }
 
-        if (item.launchType === "desktop" && item.launchValue) {
-            launcherProcess.command = ["gtk-launch", item.launchValue]
+        if (launchType === "desktop" && launchValue) {
+            launcherProcess.command = ["gtk-launch", launchValue]
             launcherProcess.running = true
-            resultActivated(item)
+            resultActivated(launchItem)
+            registerItemUsage(launchItem)
             closeRequested()
             return true
         }
 
-        if ((item.launchType === "file" || item.launchType === "url") && item.launchValue) {
-            launcherProcess.command = ["xdg-open", item.launchValue]
+        if ((launchType === "file" || launchType === "url") && launchValue) {
+            launcherProcess.command = ["xdg-open", launchValue]
             launcherProcess.running = true
-            resultActivated(item)
+            resultActivated(launchItem)
+            registerItemUsage(launchItem)
             closeRequested()
             return true
         }
 
-        if (item.launchType === "command" && item.launchValue) {
-            launcherProcess.command = ["sh", "-c", item.launchValue]
+        if (launchType === "command" && launchValue) {
+            launcherProcess.command = ["sh", "-c", launchValue]
             launcherProcess.running = true
-            resultActivated(item)
+            resultActivated(launchItem)
+            registerItemUsage(launchItem)
             closeRequested()
             return true
         }
 
-        statusMessage = "Selected item cannot be launched"
+        statusMessage = launchType === "" ? "Selected item is missing launch data" : "Selected item cannot be launched"
         return false
     }
 
@@ -721,7 +778,7 @@ Item {
 
     Timer {
         id: fileSearchDebounce
-        interval: 120
+        interval: 220
         repeat: false
         onTriggered: root.startFileSearch(root.pendingFileSearchQuery)
     }
@@ -777,8 +834,21 @@ Item {
 
         onExited: function(code, status) {
             const completedQuery = root.activeFileSearchQuery
+            const wasCanceled = root.cancelingFileSearch
+
+            root.cancelingFileSearch = false
 
             root.loadingFiles = false
+
+            if (wasCanceled) {
+                root.fileResultsBuffer = []
+                root.rebuildResults()
+
+                if (root.normalizeText(root.pendingFileSearchQuery) !== root.normalizeText(completedQuery))
+                    root.startFileSearch(root.pendingFileSearchQuery)
+
+                return
+            }
 
             if (code === 0) {
                 if (root.normalizeText(completedQuery) === root.normalizeText(root.query))

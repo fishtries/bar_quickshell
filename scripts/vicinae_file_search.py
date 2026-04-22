@@ -9,20 +9,29 @@ import sys
 from pathlib import Path
 
 
-def search_roots(query: str) -> list[Path]:
-    home = Path.home()
-    roots: list[Path] = [home]
+SEARCH_TIMEOUT_SECONDS = 1.2
+MAX_SEARCH_DEPTH = 6
+MAX_SEARCH_THREADS = 1
+EXCLUDED_PATTERNS = [
+    ".cache",
+    ".git",
+    "node_modules",
+    ".venv",
+    "venv",
+    "target",
+    "dist",
+    "build",
+    ".cargo",
+    ".rustup",
+    ".steam",
+    "Steam",
+    "SteamLibrary",
+    ".local/share/Trash",
+    ".pnpm-store",
+]
 
-    if query.startswith("/"):
-        return [Path("/")]
 
-    if len(query.strip()) >= 3:
-        roots.extend([
-            Path("/etc"),
-            Path("/opt"),
-            Path("/usr/share"),
-        ])
-
+def unique_existing_roots(roots: list[Path]) -> list[Path]:
     seen: set[Path] = set()
     result: list[Path] = []
 
@@ -32,6 +41,28 @@ def search_roots(query: str) -> list[Path]:
             result.append(root)
 
     return result
+
+
+def resolve_search(query: str) -> tuple[str, list[Path]]:
+    raw = query.strip()
+
+    if raw == "" or raw in {"/", "~"}:
+        return "", []
+
+    if raw.startswith("/") or raw.startswith("~"):
+        expanded = Path(os.path.expanduser(raw))
+        root = expanded.parent
+        needle = expanded.name
+
+        while not root.exists() and root != root.parent:
+            if root.name:
+                needle = f"{root.name} {needle}".strip()
+            root = root.parent
+
+        pattern = build_pattern(needle)
+        return pattern, unique_existing_roots([root])
+
+    return build_pattern(raw), unique_existing_roots([Path.home()])
 
 
 def build_pattern(query: str) -> str:
@@ -95,12 +126,29 @@ def entry_for_path(raw_path: str) -> dict[str, object]:
     }
 
 
+def run_fd(command: list[str]) -> tuple[int, str]:
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=SEARCH_TIMEOUT_SECONDS,
+        )
+        return completed.returncode, completed.stdout
+    except subprocess.TimeoutExpired as error:
+        stdout = error.stdout or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode("utf-8", errors="ignore")
+        return 0, stdout
+
+
 def main() -> int:
     query = sys.argv[1] if len(sys.argv) > 1 else ""
     limit = int(sys.argv[2]) if len(sys.argv) > 2 else 60
-    pattern = build_pattern(query)
+    pattern, roots = resolve_search(query)
 
-    if not pattern:
+    if not pattern or not roots:
         return 0
 
     command = [
@@ -109,25 +157,34 @@ def main() -> int:
         "--color",
         "never",
         "--hidden",
-        "--follow",
         "--max-results",
         str(limit),
+        "--threads",
+        str(MAX_SEARCH_THREADS),
+        "--max-depth",
+        str(MAX_SEARCH_DEPTH),
         "-i",
         "-t",
         "f",
         "-t",
         "d",
-        pattern,
-        *[str(root) for root in search_roots(query)],
     ]
 
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
-    if completed.returncode not in {0, 1}:
-        return completed.returncode
+    for excluded in EXCLUDED_PATTERNS:
+        command.extend(["--exclude", excluded])
+
+    command.extend([
+        pattern,
+        *[str(root) for root in roots],
+    ])
+
+    returncode, stdout = run_fd(command)
+    if returncode not in {0, 1}:
+        return returncode
 
     seen: set[str] = set()
 
-    for line in completed.stdout.splitlines():
+    for line in stdout.splitlines():
         candidate = line.strip()
         if not candidate or candidate in seen:
             continue

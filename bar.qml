@@ -12,6 +12,7 @@ import "modules/audio"
 import "modules/math"
 import "modules/controlcenter"
 import "modules/notifications"
+import "modules/todo"
 import "modules/volume"
 import "components"
 import "modules/vicinae"
@@ -45,6 +46,7 @@ PanelWindow {
         Region { item: layoutContainer }
         Region { item: wsModule }
         Region { item: clockModule.popoutItem }
+        Region { item: todoModule.popoutItem }
         Region { item: mathModule.popoutItem }
         Region { item: ccModule.popoutItem.maskItem }
         Region { item: audioVis.popoutItem }
@@ -60,11 +62,22 @@ PanelWindow {
         anchors.leftMargin: 20
         anchors.rightMargin: 20
 
-        // ─── Левая группа: Часы ───────────────────────────────────────────
-        ClockModule {
-            id: clockModule
+        // ─── Левая группа: Часы и Задачи ───────────────────────────────────────────
+        Row {
+            id: leftGroup
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
+            spacing: 16
+
+            ClockModule {
+                id: clockModule
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            TodoModule {
+                id: todoModule
+                anchors.verticalCenter: parent.verticalCenter
+            }
         }
 
         // ─── Центральная группа: ИДЕАЛЬНЫЙ ЦЕНТР ───────────────────────────
@@ -161,6 +174,8 @@ PanelWindow {
     VicinaePopup {
         id: vicinaeLauncher
         visible: false
+        launchOriginX: layoutContainer.x + centerGroup.x + wsModule.x + wsModule.launcherAnchorX
+        launchOriginY: layoutContainer.y + centerGroup.y + wsModule.y + wsModule.launcherAnchorY
     }
 
     NotificationOverlay {}

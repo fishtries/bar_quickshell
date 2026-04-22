@@ -261,6 +261,20 @@ Item {
         root.moveReminder(reminder, root.formatDateKeyFromDate(targetDate), root.formatTime(targetDate));
     }
 
+    function scheduleReminder(reminder, targetDateObj) {
+        if (!reminder || root.reminderActionBusy || !targetDateObj)
+            return false;
+
+        let normalizedDate = new Date(targetDateObj.getTime());
+        normalizedDate.setSeconds(0, 0);
+
+        if (isNaN(normalizedDate.getTime()) || normalizedDate.getTime() <= Date.now())
+            return false;
+
+        root.moveReminder(reminder, root.formatDateKeyFromDate(normalizedDate), root.formatTime(normalizedDate));
+        return true;
+    }
+
     function completeReminder(reminder) {
         if (!reminder || root.reminderActionBusy)
             return;

@@ -114,8 +114,7 @@ def update_stats(added_chars, added_formulas):
         "total_formulas": 0,
         "sessions_completed": 0,
         "streak_days": 0,
-        "last_session_date": "",
-        "history": {}
+        "last_session_date": ""
     }
     
     if os.path.exists(STATS_FILE):
@@ -124,9 +123,6 @@ def update_stats(added_chars, added_formulas):
                 stats.update(json.load(f))
         except:
             pass
-            
-    if "history" not in stats:
-        stats["history"] = {}
             
     today_str = datetime.now().strftime("%Y-%m-%d")
     
@@ -151,12 +147,6 @@ def update_stats(added_chars, added_formulas):
     stats["total_chars"] += added_chars
     stats["total_formulas"] += added_formulas
     stats["sessions_completed"] += 1
-    
-    if today_str not in stats["history"]:
-        stats["history"][today_str] = {"chars": 0, "formulas": 0}
-        
-    stats["history"][today_str]["chars"] += added_chars
-    stats["history"][today_str]["formulas"] += added_formulas
     
     with open(STATS_FILE, "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=4)
