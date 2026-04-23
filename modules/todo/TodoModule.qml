@@ -11,6 +11,7 @@ Item {
     
     property bool popoutOpen: false
     property Item popoutItem: popout
+    property bool needsKeyboard: popout.needsKeyboard
 
     Rectangle {
         id: btnRect

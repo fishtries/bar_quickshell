@@ -8,6 +8,9 @@ Item {
 
     property bool isOpen: false
     property int popoutWidth: 280
+    property bool animateContentResize: false
+    property int contentResizeDuration: AnimationConfig.durationQuick
+    property int contentResizeEasingType: AnimationConfig.easingDefaultInOut
     Behavior on popoutWidth {
         enabled: root.isOpen
         NumberAnimation { duration: AnimationConfig.durationVerySlow; easing.type: AnimationConfig.easingMovementInOut }
@@ -47,6 +50,10 @@ Item {
         
         width: 0
         height: 0
+        Behavior on height {
+            enabled: root.isOpen && root.animateContentResize
+            NumberAnimation { duration: root.contentResizeDuration; easing.type: root.contentResizeEasingType }
+        }
         radius: Theme.radiusPopout
         color: Theme.bgPopout
         // Вычисляются через анимацию x

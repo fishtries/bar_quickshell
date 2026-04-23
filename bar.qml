@@ -38,7 +38,7 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "qs-bar"
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: clockModule.needsKeyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: (clockModule.needsKeyboard || todoModule.needsKeyboard) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     visible: !Hyprland.focusedWindow || !Hyprland.focusedWindow.fullscreen
     
     // Маска кликабельности: собираем только те области, которые реально заняты интерфейсом

@@ -1,6 +1,11 @@
 {
   "2026-04-23": [
     {
+      "title": "Посмотреть органайзеры для столов",
+      "list": "Reminders",
+      "time": "01:24"
+    },
+    {
       "title": "massage",
       "list": "Reminders",
       "time": "07:00"
@@ -11,14 +16,14 @@
       "time": "15:00"
     },
     {
-      "title": "англ долг",
-      "list": "Reminders",
-      "time": "16:00"
-    },
-    {
       "title": "Купить цветы  деле",
       "list": "Reminders",
-      "time": "17:00"
+      "time": "17:30"
+    },
+    {
+      "title": "англ долг",
+      "list": "Reminders",
+      "time": "19:30"
     }
   ],
   "2026-04-22": [
@@ -31,16 +36,6 @@
       "title": "сайт",
       "list": "Reminders",
       "time": "19:00"
-    },
-    {
-      "title": "Посмотреть органайзеры для столов",
-      "list": "Reminders",
-      "time": "20:47"
-    },
-    {
-      "title": "позвонить делечке",
-      "list": "Reminders",
-      "time": "23:20"
     }
   ]
 }
