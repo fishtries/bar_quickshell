@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import "../../components"
 import "../../core"
 
@@ -9,8 +10,10 @@ Rectangle {
     property string title: ""
     property string subtitle: ""
     property string iconText: "󰍉"
+    property string iconName: ""
     property string accessoryText: ""
     property color accessoryColor: Theme.info
+    property string iconColor: Theme.textPrimary
     property string aliasText: ""
     property bool selected: false
     property bool active: false
@@ -42,10 +45,22 @@ Rectangle {
             radius: 8
             color: selected ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.05)
 
+            Image {
+                visible: root.iconName !== ""
+                anchors.centerIn: parent
+                source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
+                width: 20
+                height: 20
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
+            }
+
             AppIcon {
+                visible: root.iconName === ""
                 anchors.centerIn: parent
                 text: root.iconText
-                color: Theme.textPrimary
+                color: root.iconColor
                 font.pixelSize: 15
             }
 

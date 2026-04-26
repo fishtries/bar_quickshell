@@ -11,17 +11,41 @@ Item {
     property bool animateContentResize: false
     property int contentResizeDuration: AnimationConfig.durationQuick
     property int contentResizeEasingType: AnimationConfig.easingDefaultInOut
+    property bool isSettled: false
+    readonly property real contentHeight: contentColumn.implicitHeight + root.contentPadding * 2
+    property real closeLiftY: 0
+    readonly property bool isPresented: root.isOpen || popoutRect.width > 0 || popoutRect.height > 0
+    function syncCloseGeometry() {
+        let targetCenterY = Math.max(0, (root.contentHeight - root.bubbleDiameter) / 2);
+        root.closeLiftY = targetCenterY / 3;
+    }
+    Connections {
+        target: root
+        function onIsOpenChanged() {
+            if (root.isOpen)
+                root.syncCloseGeometry();
+            else
+                root.isSettled = false;
+        }
+    }
+    Connections {
+        target: root
+        function onContentHeightChanged() {
+            if (root.isOpen)
+                root.syncCloseGeometry();
+        }
+    }
     Behavior on popoutWidth {
         enabled: root.isOpen
         NumberAnimation { duration: AnimationConfig.durationVerySlow; easing.type: AnimationConfig.easingMovementInOut }
     }
     signal closeRequested()
     property bool autoClose: true
-    
+
     HoverHandler {
         id: hover
     }
-    
+
     Timer {
         interval: AnimationConfig.timerPopoutAutoClose
         running: root.isOpen && !hover.hovered && root.autoClose
@@ -29,11 +53,13 @@ Item {
     }
 
     default property alias content: contentLayout.data
-    
+
     // Внешние размеры четко зафиксированы по ширине окна
-    implicitWidth: root.popoutWidth
-    implicitHeight: popoutRect.y + popoutRect.height
-    
+    implicitWidth: root.isPresented ? root.popoutWidth : 0
+    implicitHeight: root.isPresented ? (popoutRect.y + popoutRect.height) : 0
+    width: implicitWidth
+    height: implicitHeight
+
     // Точка начала анимации по X внутри попаута (по умолчанию по центру)
     property real originX: popoutWidth / 2
 
@@ -47,11 +73,11 @@ Item {
 
     Rectangle {
         id: popoutRect
-        
+
         width: 0
         height: 0
         Behavior on height {
-            enabled: root.isOpen && root.animateContentResize
+            enabled: root.isSettled && root.animateContentResize
             NumberAnimation { duration: root.contentResizeDuration; easing.type: root.contentResizeEasingType }
         }
         radius: Theme.radiusPopout
@@ -62,19 +88,18 @@ Item {
 
         scale: root.bubbleScale
         transformOrigin: Item.Top
-        
+
         // Целевая точка для перемещения кружка к центру будущего попапа
-        property real targetCenterY: Math.max(0, (contentColumn.implicitHeight + root.contentPadding * 2 - root.bubbleDiameter) / 2)
+        property real targetCenterY: Math.max(0, (root.contentHeight - root.bubbleDiameter) / 2)
         property real collapsedX: root.originX - root.bubbleRadius
-        property real collapseLiftY: targetCenterY / 3
-        
+
         states: State {
             name: "open"
             when: root.isOpen
             PropertyChanges { target: popoutRect; width: root.popoutWidth; height: contentColumn.implicitHeight + root.contentPadding * 2; x: 0; y: 0; blurValue: 0 }
             PropertyChanges { target: contentColumn; opacity: 1.0; scale: 1.0 }
         }
-        
+
         transitions: [
             Transition {
                 to: "open"
@@ -101,6 +126,7 @@ Item {
                             NumberAnimation { target: contentColumn; property: "scale"; duration: AnimationConfig.durationExtraSlow; easing.type: AnimationConfig.easingSpringOut; easing.amplitude: AnimationConfig.springAmplitudePopout; easing.period: AnimationConfig.springPeriodPopoutScale }
                         }
                     }
+                    ScriptAction { script: { root.syncCloseGeometry(); root.isSettled = true } }
                 }
             },
             Transition {
@@ -116,7 +142,7 @@ Item {
                             NumberAnimation { target: popoutRect; property: "width"; to: root.bubbleDiameter; duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultIn }
                             NumberAnimation { target: popoutRect; property: "x"; to: popoutRect.collapsedX; duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultIn }
                             NumberAnimation { target: popoutRect; property: "height"; to: root.bubbleDiameter; duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultIn }
-                            NumberAnimation { target: popoutRect; property: "y"; to: popoutRect.collapseLiftY; duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultIn }
+                            NumberAnimation { target: popoutRect; property: "y"; to: root.closeLiftY; duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultIn }
                             NumberAnimation { target: popoutRect; property: "blurValue"; to: 0.8; duration: AnimationConfig.durationVeryFast; easing.type: AnimationConfig.easingDefaultIn }
                         }
                     }
@@ -135,7 +161,7 @@ Item {
                 }
             }
         ]
-        
+
         // Эффект блюра при появлении
         property real blurValue: 1.0
 
@@ -145,22 +171,22 @@ Item {
             blurMax: AnimationConfig.blurMaxHeavy
             blur: popoutRect.blurValue
         }
-        
+
         // Внутренний контейнер с обрезкой для содержимого
         Item {
             anchors.fill: parent
             clip: true
-            
+
             ColumnLayout {
                 id: contentColumn
                 anchors.fill: parent
                 anchors.margins: root.contentPadding
                 spacing: Theme.spacingDefault
-                
+
                 opacity: 0.0
                 scale: 0.95
                 transformOrigin: Item.Top
-                
+
                 ColumnLayout {
                     id: contentLayout
                     Layout.fillWidth: true
@@ -168,5 +194,54 @@ Item {
                 }
             }
         }
+    }
+
+    Binding {
+        target: popoutRect
+        property: "width"
+        value: root.popoutWidth
+        when: root.isOpen && root.isSettled
+    }
+
+    Binding {
+        target: popoutRect
+        property: "height"
+        value: root.contentHeight
+        when: root.isOpen && root.isSettled
+    }
+
+    Binding {
+        target: popoutRect
+        property: "x"
+        value: 0
+        when: root.isOpen && root.isSettled
+    }
+
+    Binding {
+        target: popoutRect
+        property: "y"
+        value: 0
+        when: root.isOpen && root.isSettled
+    }
+
+    Binding {
+        target: popoutRect
+        property: "blurValue"
+        value: 0
+        when: root.isOpen && root.isSettled
+    }
+
+    Binding {
+        target: contentColumn
+        property: "opacity"
+        value: 1.0
+        when: root.isOpen && root.isSettled
+    }
+
+    Binding {
+        target: contentColumn
+        property: "scale"
+        value: 1.0
+        when: root.isOpen && root.isSettled
     }
 }

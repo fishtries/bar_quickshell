@@ -103,6 +103,7 @@ def parse_desktop_file(base_dir: Path, file_path: Path) -> dict | None:
         return None
 
     app_id = desktop_id(base_dir, file_path)
+    icon_name = section.get("Icon", "").strip()
     generic_name = section.get("GenericName", "").strip()
     comment = section.get("Comment", "").strip()
     exec_value = section.get("Exec", "").strip()
@@ -124,6 +125,7 @@ def parse_desktop_file(base_dir: Path, file_path: Path) -> dict | None:
         "title": name,
         "subtitle": subtitle,
         "iconText": pick_icon_text(categories, name, exec_value),
+        "iconName": icon_name,
         "accessoryText": "Launch",
         "accessoryColor": "#55ccff",
         "aliasText": alias,

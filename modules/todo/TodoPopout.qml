@@ -19,6 +19,8 @@ PopoutWrapper {
     property var dueDate: new Date()
     property int dueHour: 18
     property int dueMinute: 0
+    readonly property string safePrimaryFontFamily: Theme.fontPrimary ? String(Theme.fontPrimary) : ""
+    readonly property string safeIconFontFamily: Theme.fontIcon ? String(Theme.fontIcon) : ""
     popoutWidth: 380
     animateContentResize: true
     contentResizeDuration: AnimationConfig.durationQuick
@@ -744,7 +746,7 @@ PopoutWrapper {
             // Логика получения данных: либо из Repeater напрямую (modelData), либо из Loader (property myNodeData)
             property var nodeData: typeof myNodeData !== "undefined" ? myNodeData : modelData
             property bool projectCollapsed: nodeData && nodeData.type === "project" ? root.isProjectCollapsed(nodeData.fullProject) : false
-            property int projectTaskCount: nodeData && nodeData.type === "project" ? root.collectProjectTaskUuids(nodeData).length : 0
+            property int projectTaskCount: (nodeData && nodeData.type === "project") ? ((nodeData.taskCount !== undefined) ? nodeData.taskCount : root.collectProjectTaskUuids(nodeData).length) : 0
 
             // ---- Если проект ----
             ColumnLayout {
@@ -774,21 +776,21 @@ PopoutWrapper {
                             Text {
                                 text: elementRoot.projectCollapsed ? "▸" : "▾"
                                 color: Theme.textSecondary
-                                font.family: Theme.fontPrimary
+                                font.family: root.safePrimaryFontFamily
                                 font.pixelSize: 13
                             }
 
                             Text {
-                                text: ""
+                                text: root.safeIconFontFamily !== "" ? "" : ""
                                 color: Theme.info
-                                font.family: Theme.fontIcon
+                                font.family: root.safeIconFontFamily
                                 font.pixelSize: 14
                             }
 
                             Text {
                                 text: root.projectDisplayName(elementRoot.nodeData)
                                 color: Theme.info
-                                font.family: Theme.fontPrimary
+                                font.family: root.safePrimaryFontFamily
                                 font.bold: true
                                 font.pixelSize: 13
                                 elide: Text.ElideRight
@@ -798,7 +800,7 @@ PopoutWrapper {
                             Text {
                                 text: String(elementRoot.projectTaskCount)
                                 color: Theme.textSecondary
-                                font.family: Theme.fontPrimary
+                                font.family: root.safePrimaryFontFamily
                                 font.pixelSize: 12
                             }
                         }
@@ -824,9 +826,9 @@ PopoutWrapper {
                         Text {
                             id: deleteProjectText
                             anchors.centerIn: parent
-                            text: "󰆴"
+                            text: root.safeIconFontFamily !== "" ? "󰆴" : ""
                             color: deleteProjectMouse.containsMouse ? Theme.error : Theme.textSecondary
-                            font.family: Theme.fontIcon
+                            font.family: root.safeIconFontFamily
                             font.pixelSize: 16
                         }
 
@@ -883,6 +885,7 @@ PopoutWrapper {
                 uuid: (nodeData && nodeData.type === "task") ? nodeData.uuid : ""
                 isDue: (nodeData && nodeData.type === "task") ? (nodeData.due !== undefined) : false
                 urgency: (nodeData && nodeData.type === "task" && nodeData.urgency !== undefined) ? parseFloat(nodeData.urgency) : 0.0
+                isCompleted: (nodeData && nodeData.type === "task") ? (nodeData.status === "completed") : false
                 
                 // Прокидываем сигналы до TodoState
                 onDoneClicked: function(taskUuid) {

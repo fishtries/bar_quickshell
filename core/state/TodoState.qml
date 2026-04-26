@@ -127,12 +127,34 @@ Item {
             }
         }
 
+        function assignTaskCount(node) {
+            if (!node || node.type !== "project")
+                return 0;
+
+            let count = 0;
+
+            for (let i = 0; i < node.children.length; i++) {
+                let child = node.children[i];
+
+                if (child.type === "task")
+                    count++;
+                else
+                    count += assignTaskCount(child);
+            }
+
+            node.taskCount = count;
+            return count;
+        }
+
+        for (let i = 0; i < tree.length; i++)
+            assignTaskCount(tree[i]);
+
         return tree;
     }
 
     Process {
         id: exportStatusPendingProcess
-        command: ["task", "rc.data.location=/home/fish/.task", "status:pending", "export"]
+        command: ["task", "rc.data.location=/home/fish/.task", "status:pending", "or", "status:completed", "export"]
         stdout: SplitParser {
             onRead: data => {
                 root.exportBuffer += data + "\n";

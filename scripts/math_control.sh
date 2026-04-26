@@ -81,6 +81,8 @@ do_stop() {
 
     info "Завершаем сессию..."
 
+    python "$VALIDATOR" --complete 2>/dev/null || warn "Не удалось обновить статистику матана."
+
     # 1) Разблокировка сайтов (без GUI)
     if [[ -x "$HOSTS_HELPER" ]]; then
         sudo -n "$HOSTS_HELPER" unblock 2>/dev/null || true

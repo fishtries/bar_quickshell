@@ -1,3 +1,4 @@
+//@ pragma UseQApplication
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -13,6 +14,7 @@ import "modules/math"
 import "modules/controlcenter"
 import "modules/notifications"
 import "modules/todo"
+import "modules/systemtray"
 import "modules/volume"
 import "components"
 import "modules/vicinae"
@@ -46,7 +48,8 @@ PanelWindow {
         Region { item: layoutContainer }
         Region { item: wsModule }
         Region { item: clockModule.popoutItem }
-        Region { item: todoModule.popoutItem }
+        Region { item: todoModule.popoutMaskItem }
+        Region { item: sysTray }
         Region { item: mathModule.popoutItem }
         Region { item: ccModule.popoutItem.maskItem }
         Region { item: audioVis.popoutItem }
@@ -76,6 +79,12 @@ PanelWindow {
 
             TodoModule {
                 id: todoModule
+                anchors.verticalCenter: parent.verticalCenter
+                popoutParent: popupLayer
+            }
+
+            SystemTrayModule {
+                id: sysTray
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -151,6 +160,12 @@ PanelWindow {
                 }
             }
         }
+    }
+
+    Item {
+        id: popupLayer
+        anchors.fill: parent
+        z: 900
     }
 
     // ─── Notification cards below the island ────────────────────────────

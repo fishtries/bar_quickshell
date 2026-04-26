@@ -29,6 +29,31 @@ PopoutWrapper {
             default: return 0;
         }
     }
+
+    function formatMathSessionDate(value) {
+        if (!value)
+            return "—";
+
+        let parts = String(value).split("-");
+        if (parts.length === 3)
+            return parts[2] + "." + parts[1];
+
+        return String(value);
+    }
+
+    function mathSessionMaxChars() {
+        let sessions = MathState.recentSessions || [];
+        let maxValue = 0;
+
+        for (let i = 0; i < sessions.length; ++i) {
+            let session = sessions[i] || {};
+            let chars = Number(session.chars !== undefined ? session.chars : 0);
+            maxValue = Math.max(maxValue, chars);
+        }
+
+        return Math.max(1, maxValue);
+    }
+
     property int currentIndex: pageIndex(currentPage)
 
     // ─── Внешние данные (прокидываются из модуля) ────────────────────────
@@ -53,6 +78,7 @@ PopoutWrapper {
         if (isOpen) bubbleAnim.restart();
         if (currentPage === "wifi") wifiCCPoller.running = true;
         if (currentPage === "bluetooth") btCCPoller.running = true;
+        if (currentPage === "math") MathState.refresh();
     }
 
     // =====================================================================
@@ -475,6 +501,278 @@ PopoutWrapper {
                         spacing: 8
                         Text { text: "•"; color: "#55ff55"; font.bold: true }
                         Text { text: "Start focus music (MPV)"; color: "#e0e0e0"; font.pixelSize: 12 }
+                    }
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    columnSpacing: 10
+                    rowSpacing: 10
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 88
+                        radius: 16
+                        color: Qt.rgba(1, 1, 1, 0.06)
+                        border.color: Qt.rgba(1, 1, 1, 0.08)
+                        border.width: 1
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+
+                            AppText {
+                                text: "Completed Sessions"
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+
+                            AppText {
+                                text: MathState.sessionsCompleted
+                                color: Theme.textPrimary
+                                font { pixelSize: 22; bold: true }
+                            }
+
+                            AppText {
+                                text: MathState.lastSessionDate ? "Last: " + root.formatMathSessionDate(MathState.lastSessionDate) : "No history yet"
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 88
+                        radius: 16
+                        color: Qt.rgba(1, 1, 1, 0.06)
+                        border.color: Qt.rgba(1, 1, 1, 0.08)
+                        border.width: 1
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+
+                            AppText {
+                                text: "Total Symbols"
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+
+                            AppText {
+                                text: MathState.totalChars
+                                color: Theme.textPrimary
+                                font { pixelSize: 22; bold: true }
+                            }
+
+                            AppText {
+                                text: "Lifetime progress"
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 88
+                        radius: 16
+                        color: Qt.rgba(1, 1, 1, 0.06)
+                        border.color: Qt.rgba(1, 1, 1, 0.08)
+                        border.width: 1
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+
+                            AppText {
+                                text: "Total Formulas"
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+
+                            AppText {
+                                text: MathState.totalFormulas
+                                color: Theme.textPrimary
+                                font { pixelSize: 22; bold: true }
+                            }
+
+                            AppText {
+                                text: "Detected in notes"
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 88
+                        radius: 16
+                        color: Qt.rgba(1, 1, 1, 0.06)
+                        border.color: Qt.rgba(1, 1, 1, 0.08)
+                        border.width: 1
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+
+                            AppText {
+                                text: "Average / Session"
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+
+                            AppText {
+                                text: MathState.averageCharsPerSession
+                                color: Theme.textPrimary
+                                font { pixelSize: 22; bold: true }
+                            }
+
+                            AppText {
+                                text: MathState.streakDays > 0 ? MathState.streakDays + " day streak" : "No streak yet"
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: 18
+                    color: Qt.rgba(1, 1, 1, 0.05)
+                    border.color: Qt.rgba(1, 1, 1, 0.08)
+                    border.width: 1
+                    implicitHeight: mathStatsPanel.implicitHeight + 28
+
+                    ColumnLayout {
+                        id: mathStatsPanel
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        spacing: 12
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            AppText {
+                                text: "Recent Sessions"
+                                color: Theme.textPrimary
+                                font { pixelSize: 14; bold: true }
+                                Layout.fillWidth: true
+                            }
+
+                            AppText {
+                                text: MathState.recentSessions.length > 0 ? MathState.recentSessions.length + " tracked" : "Waiting for data"
+                                color: Theme.textSecondary
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        AppText {
+                            Layout.fillWidth: true
+                            text: MathState.lastSessionDate ? "Last session: " + root.formatMathSessionDate(MathState.lastSessionDate) : "Complete one session to unlock the chart."
+                            color: Theme.textSecondary
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Item {
+                            visible: MathState.recentSessions.length > 0
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 156
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 1
+                                color: Qt.rgba(1, 1, 1, 0.08)
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                spacing: 8
+
+                                Repeater {
+                                    model: MathState.recentSessions
+
+                                    delegate: Item {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+
+                                        property var sessionData: modelData
+                                        property real sessionChars: Number(sessionData && sessionData.chars !== undefined ? sessionData.chars : 0)
+                                        property int sessionFormulas: Number(sessionData && sessionData.formulas !== undefined ? sessionData.formulas : 0)
+                                        property bool isLatest: index === MathState.recentSessions.length - 1
+
+                                        ColumnLayout {
+                                            anchors.fill: parent
+                                            spacing: 6
+
+                                            AppText {
+                                                Layout.fillWidth: true
+                                                text: Math.round(sessionChars)
+                                                color: isLatest ? Theme.textPrimary : Theme.textSecondary
+                                                font.pixelSize: 10
+                                                horizontalAlignment: Text.AlignHCenter
+                                            }
+
+                                            Item {
+                                                Layout.fillWidth: true
+                                                Layout.fillHeight: true
+
+                                                Rectangle {
+                                                    anchors.bottom: parent.bottom
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                    width: Math.min(28, Math.max(16, parent.width * 0.45))
+                                                    height: sessionChars > 0 ? Math.max(12, (sessionChars / root.mathSessionMaxChars()) * (parent.height - 4)) : 6
+                                                    radius: width / 2
+                                                    color: isLatest ? Theme.info : Qt.rgba(1, 1, 1, 0.18)
+                                                    opacity: sessionChars > 0 ? 1.0 : 0.45
+                                                }
+                                            }
+
+                                            AppText {
+                                                Layout.fillWidth: true
+                                                text: root.formatMathSessionDate(sessionData && sessionData.date ? sessionData.date : "")
+                                                color: Theme.textSecondary
+                                                font.pixelSize: 10
+                                                horizontalAlignment: Text.AlignHCenter
+                                            }
+
+                                            AppText {
+                                                Layout.fillWidth: true
+                                                text: sessionFormulas > 0 ? sessionFormulas + " f" : ""
+                                                color: Theme.textSecondary
+                                                font.pixelSize: 10
+                                                horizontalAlignment: Text.AlignHCenter
+                                                visible: text !== ""
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Item {
+                            visible: MathState.recentSessions.length === 0
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 96
+
+                            AppText {
+                                anchors.centerIn: parent
+                                text: "No completed sessions yet"
+                                color: Theme.textSecondary
+                                font.pixelSize: 12
+                            }
+                        }
                     }
                 }
 

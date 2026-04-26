@@ -9,6 +9,8 @@ from datetime import datetime
 
 NOTES_DIR = os.path.expanduser("~/Documents/mathfuck/Syncing/Математический анализ/4 семестр")
 SNAPSHOT_FILE = "/tmp/math_snapshot.md"
+STATS_FILE = os.path.expanduser("~/.config/quickshell/data/math_stats.json")
+RECENT_SESSION_LIMIT = 7
 
 def get_target_file():
     if not os.path.exists(NOTES_DIR):
@@ -48,6 +50,42 @@ def get_target_file():
     
     # Если даты не распарсились, просто берем последний по алфавиту/созданию
     return sorted(all_files)[-1]
+
+def default_stats():
+    return {
+        "total_chars": 0,
+        "total_formulas": 0,
+        "sessions_completed": 0,
+        "streak_days": 0,
+        "last_session_date": "",
+        "recent_sessions": []
+    }
+
+def load_stats():
+    os.makedirs(os.path.dirname(STATS_FILE), exist_ok=True)
+
+    stats = default_stats()
+
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, "r", encoding="utf-8") as f:
+                loaded_stats = json.load(f)
+
+            if isinstance(loaded_stats, dict):
+                stats.update(loaded_stats)
+        except:
+            pass
+
+    if not isinstance(stats.get("recent_sessions"), list):
+        stats["recent_sessions"] = []
+
+    return stats
+
+def save_stats(stats):
+    os.makedirs(os.path.dirname(STATS_FILE), exist_ok=True)
+
+    with open(STATS_FILE, "w", encoding="utf-8") as f:
+        json.dump(stats, f, indent=4, ensure_ascii=False)
 
 def do_sync():
     try:
@@ -106,25 +144,9 @@ def do_check():
          print(json.dumps({"status": "error", "error": str(e)}))
 
 def update_stats(added_chars, added_formulas):
-    STATS_FILE = os.path.expanduser("~/.config/quickshell/data/math_stats.json")
-    os.makedirs(os.path.dirname(STATS_FILE), exist_ok=True)
-    
-    stats = {
-        "total_chars": 0,
-        "total_formulas": 0,
-        "sessions_completed": 0,
-        "streak_days": 0,
-        "last_session_date": ""
-    }
-    
-    if os.path.exists(STATS_FILE):
-        try:
-            with open(STATS_FILE, "r", encoding="utf-8") as f:
-                stats.update(json.load(f))
-        except:
-            pass
-            
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    stats = load_stats()
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
     
     if stats["last_session_date"] == today_str:
         pass
@@ -147,11 +169,22 @@ def update_stats(added_chars, added_formulas):
     stats["total_chars"] += added_chars
     stats["total_formulas"] += added_formulas
     stats["sessions_completed"] += 1
+    stats["recent_sessions"] = (stats["recent_sessions"] + [{
+        "date": today_str,
+        "chars": added_chars,
+        "formulas": added_formulas,
+        "completed_at": now.strftime("%H:%M")
+    }])[-RECENT_SESSION_LIMIT:]
     
-    with open(STATS_FILE, "w", encoding="utf-8") as f:
-        json.dump(stats, f, indent=4)
-        
+    save_stats(stats)
+
     return stats
+
+def do_stats():
+    try:
+        print(json.dumps(load_stats(), ensure_ascii=False))
+    except Exception as e:
+        print(json.dumps({"status": "error", "error": str(e)}))
 
 def do_complete():
     try:
@@ -205,6 +238,7 @@ def main():
     parser.add_argument("--sync", action="store_true", help="Создать копию текущего файла в /tmp/")
     parser.add_argument("--check", action="store_true", help="Сравнить файл с копией и вывести статистику в формате JSON")
     parser.add_argument("--complete", action="store_true", help="Завершить сессию, обновить статистику и удалить /tmp/math_snapshot.md")
+    parser.add_argument("--stats", action="store_true", help="Вывести накопленную статистику в формате JSON")
     
     args = parser.parse_args()
     
@@ -214,6 +248,8 @@ def main():
         do_check()
     elif args.complete:
         do_complete()
+    elif args.stats:
+        do_stats()
     else:
         parser.print_help()
 

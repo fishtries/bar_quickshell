@@ -44,6 +44,7 @@ Item {
             required property string title
             required property string subtitle
             required property string iconText
+            required property string iconName
             required property string accessoryText
             required property var accessoryColor
             required property string aliasText
@@ -72,6 +73,7 @@ Item {
                     title: delegateLoader.title
                     subtitle: delegateLoader.subtitle
                     iconText: delegateLoader.iconText
+                    iconName: delegateLoader.iconName
                     accessoryText: delegateLoader.accessoryText
                     accessoryColor: delegateLoader.accessoryColor
                     aliasText: delegateLoader.aliasText

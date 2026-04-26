@@ -11,7 +11,13 @@ Item {
     
     property bool popoutOpen: false
     property Item popoutItem: popout
+    property Item popoutMaskItem: popout.maskItem
+    property Item popoutParent: null
+    property real popoutHorizontalOffset: 113
     property bool needsKeyboard: popout.needsKeyboard
+    readonly property Item effectivePopoutParent: popoutParent ? popoutParent : root
+    readonly property real effectiveHeight: root.height > 0 ? root.height : root.implicitHeight
+    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, root.popoutHorizontalOffset, root.effectiveHeight + 8)
 
     Rectangle {
         id: btnRect
@@ -42,12 +48,12 @@ Item {
 
     TodoPopout {
         id: popout
+        parent: root.effectivePopoutParent
         isOpen: root.popoutOpen
         onCloseRequested: root.popoutOpen = false
-        
-        anchors.top: parent.bottom
-        anchors.topMargin: 8
-        anchors.left: parent.left
+        x: root.popoutPosition.x
+        y: root.popoutPosition.y
+        z: 1000
         
         originX: 16 // Центр иконки
     }

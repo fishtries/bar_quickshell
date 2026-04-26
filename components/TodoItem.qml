@@ -12,6 +12,7 @@ Rectangle {
     property string uuid: ""
     property bool isDue: false
     property real urgency: 0.0
+    property bool isCompleted: false
 
     // Сигналы
     signal doneClicked(string taskUuid)
@@ -21,6 +22,7 @@ Rectangle {
     implicitHeight: Math.max(44, rowLayout.implicitHeight + Theme.spacingDefault)
     color: hoverArea.containsMouse ? Theme.bgHover : "transparent"
     radius: Theme.radiusPanel / 2
+    opacity: root.isCompleted ? 0.5 : 1.0
 
     // Изменение цвета фона при наведении на саму строку задач
     MouseArea {
@@ -46,8 +48,8 @@ Rectangle {
             width: 20
             height: 20
             radius: 6
-            color: checkHoverArea.containsMouse ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.2) : "transparent"
-            border.color: checkHoverArea.containsMouse ? Theme.success : Theme.textSecondary
+            color: root.isCompleted ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.25) : (checkHoverArea.containsMouse ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.2) : "transparent")
+            border.color: root.isCompleted ? Theme.success : (checkHoverArea.containsMouse ? Theme.success : Theme.textSecondary)
             border.width: 2
             Layout.alignment: Qt.AlignVCenter
 
@@ -55,7 +57,7 @@ Rectangle {
                 anchors.centerIn: parent
                 text: "✓"
                 color: Theme.success
-                visible: checkHoverArea.containsMouse
+                visible: root.isCompleted || checkHoverArea.containsMouse
                 font.pixelSize: 14
                 font.bold: true
             }
@@ -83,6 +85,7 @@ Rectangle {
                 font.family: Theme.fontPrimary
                 wrapMode: Text.Wrap
                 font.pixelSize: 15
+                font.strikeout: root.isCompleted
             }
             
             // Если есть deadline, добавим маленький текстовый бейдж
