@@ -17,7 +17,7 @@ Item {
     property bool needsKeyboard: popout.needsKeyboard
     readonly property Item effectivePopoutParent: popoutParent ? popoutParent : root
     readonly property real effectiveHeight: root.height > 0 ? root.height : root.implicitHeight
-    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, root.popoutHorizontalOffset, root.effectiveHeight + 8)
+    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, root.popoutHorizontalOffset, root.effectiveHeight + 24)
 
     Rectangle {
         id: btnRect
