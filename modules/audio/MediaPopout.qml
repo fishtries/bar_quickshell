@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import "../../components"
+import "../../core"
 
 PopoutWrapper {
     id: root
@@ -190,7 +191,7 @@ PopoutWrapper {
                 implicitWidth: 320
                 implicitHeight: 320
                 radius: 12
-                color: Qt.rgba(1, 1, 1, 0.05)
+                color: Theme.bgSubtle
                 clip: true
 
                 Image {
@@ -210,7 +211,7 @@ PopoutWrapper {
                     Text {
                         anchors.centerIn: parent
                         text: "\udb81\udcf6"
-                        color: Qt.rgba(1, 1, 1, 0.1)
+                        color: Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.1)
                         font.pixelSize: 80
                     }
                 }
@@ -224,7 +225,7 @@ PopoutWrapper {
                 Text {
                     id: trackTitle
                     text: root.mediaTitle || "No Media Playing"
-                    color: "#ffffff"
+                    color: Theme.textPrimary
                     font { pixelSize: 22; bold: true }
                     Layout.fillWidth: true
                     elide: Text.ElideRight
@@ -233,7 +234,7 @@ PopoutWrapper {
                 Text {
                     id: trackArtistAlbum
                     text: root.mediaArtist || "—"
-                    color: "#aaaaaa"
+                    color: Theme.textSecondary
                     font.pixelSize: 14
                     Layout.fillWidth: true
                     elide: Text.ElideRight
@@ -249,7 +250,7 @@ PopoutWrapper {
                 
                 Text {
                     text: "\udb81\udcae" // Prev
-                    color: prevHover.hovered ? "#ffffff" : "#888888"
+                    color: prevHover.hovered ? Theme.textPrimary : Theme.textSecondary
                     font.pixelSize: 28
                     Behavior on color { ColorAnimation { duration: 150 } }
                     HoverHandler { id: prevHover }
@@ -258,7 +259,7 @@ PopoutWrapper {
 
                 Text {
                     text: root.mediaStatus === "Playing" ? "\udb80\udfe4" : "\udb81\udc0a" // Pause : Play
-                    color: playHover.hovered ? "#ffffff" : "#888888"
+                    color: playHover.hovered ? Theme.textPrimary : Theme.textSecondary
                     font.pixelSize: 38
                     Behavior on color { ColorAnimation { duration: 150 } }
                     HoverHandler { id: playHover }
@@ -267,7 +268,7 @@ PopoutWrapper {
 
                 Text {
                     text: "\udb81\udcad" // Next
-                    color: nextHover.hovered ? "#ffffff" : "#888888"
+                    color: nextHover.hovered ? Theme.textPrimary : Theme.textSecondary
                     font.pixelSize: 28
                     Behavior on color { ColorAnimation { duration: 150 } }
                     HoverHandler { id: nextHover }
@@ -301,12 +302,12 @@ PopoutWrapper {
                         width: progressSlider.availableWidth
                         height: implicitHeight
                         radius: 2
-                        color: Qt.rgba(1, 1, 1, 0.1)
+                        color: Theme.bgHover
 
                         Rectangle {
                             width: progressSlider.visualPosition * parent.width
                             height: parent.height
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             radius: 2
                         }
                     }
@@ -317,7 +318,7 @@ PopoutWrapper {
                         implicitWidth: 10
                         implicitHeight: 10
                         radius: 5
-                        color: "#ffffff"
+                        color: Theme.textPrimary
                     }
                 }
 
@@ -327,7 +328,7 @@ PopoutWrapper {
                     
                     Text {
                         text: root.formatTime(root.mediaPosition)
-                        color: "#888888"
+                        color: Theme.textSecondary
                         font.pixelSize: 11
                     }
                     
@@ -335,7 +336,7 @@ PopoutWrapper {
                     
                     Text {
                         text: root.formatTime(root.mediaLength)
-                        color: "#888888"
+                        color: Theme.textSecondary
                         font.pixelSize: 11
                     }
                 }
@@ -359,17 +360,39 @@ PopoutWrapper {
                 Layout.leftMargin: 20
                 Layout.rightMargin: 20
                 clip: true
-                spacing: 8
+                spacing: 16
                 highlightMoveDuration: 600
                 highlightMoveVelocity: -1
-                currentIndex: root.currentLyricIndex
+                currentIndex: root.manualMode ? -1 : root.currentLyricIndex
                 highlightRangeMode: root.manualMode ? ListView.NoHighlightRange : ListView.StrictlyEnforceRange
                 preferredHighlightBegin: height * 0.25
                 preferredHighlightEnd: height * 0.25
 
-                onMovementStarted: {
-                    root.manualMode = true;
-                    restoreAutoScrollTimer.restart();
+                onDraggingChanged: {
+                    if (dragging) {
+                        root.manualMode = true;
+                        restoreAutoScrollTimer.stop();
+                    } else if (!flicking) {
+                        restoreAutoScrollTimer.restart();
+                    }
+                }
+
+                onFlickingChanged: {
+                    if (flicking) {
+                        root.manualMode = true;
+                        restoreAutoScrollTimer.stop();
+                    } else if (!dragging) {
+                        restoreAutoScrollTimer.restart();
+                    }
+                }
+
+                WheelHandler {
+                    target: null
+                    onWheel: event => {
+                        root.manualMode = true;
+                        restoreAutoScrollTimer.restart();
+                        event.accepted = false;
+                    }
                 }
 
                 model: ListModel { id: lyricsModel }
@@ -377,7 +400,7 @@ PopoutWrapper {
                 delegate: Item {
                     id: lyricContainer
                     width: ListView.view.width
-                    height: lyricText.implicitHeight + (isActive ? 28 : 0)
+                    height: lyricText.implicitHeight + (isActive ? 28 : 0) + Math.max(0, jellyOffset * 9.15)
                     
                     readonly property bool isActive: index === root.currentLyricIndex
                     readonly property bool revealed: index < root.revealedCount
@@ -390,25 +413,79 @@ PopoutWrapper {
                     // Расстояние от фокуса (0 = в центре, 1 = у края)
                     readonly property real distFromFocal: Math.abs(viewY - focalPoint)
                     readonly property real normalizedDist: Math.min(1.0, distFromFocal / (ListView.view.height * 0.55))
+                    readonly property real bottomFade: Math.max(0.0, Math.min(1.0, (viewY - ListView.view.height * 0.55) / (ListView.view.height * 0.28)))
                     
                     Behavior on height { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
 
                     // ─── Jelly-эффект (пружинистая инерция) ────────────
                     property real jellyOffset: 0
+                    property real jellyTargetOffset: 0
+                    readonly property int followDelay: {
+                        const trailingDistance = Math.max(0, index - root.currentLyricIndex);
+                        if (trailingDistance === 0 || trailingDistance > 10)
+                            return 0;
+
+                        const headDistance = Math.min(1, trailingDistance);
+                        const tailDistance = Math.max(0, trailingDistance - 1);
+                        const headKick = 1 * (1 - Math.exp(-1.15 * headDistance));
+                        const tailGlide = 1200 * (1 - Math.exp(-0.02 * tailDistance)) + tailDistance * 35;
+                        const computedDelay = 45 + headKick + tailGlide;
+                        return Math.min(200 * index, computedDelay);
+                    }
 
                     Connections {
                         target: root
                         function onCurrentLyricIndexChanged() {
                             // Подтолкнуть строки пропорционально расстоянию
-                            let diff = index - root.currentLyricIndex;
-                            lyricContainer.jellyOffset = diff * 8;
+                            let trailingDistance = Math.max(0, index - root.currentLyricIndex);
+                            if (trailingDistance > 0 && trailingDistance <= 10) {
+                                lyricContainer.jellyTargetOffset = Math.min(8, 1 + trailingDistance * 12);
+                                settleTimer.stop();
+                                followTimer.restart();
+                            } else {
+                                followTimer.stop();
+                                settleTimer.stop();
+                                lyricContainer.jellyTargetOffset = 0;
+                                lyricContainer.jellyOffset = 0;
+                            }
                         }
                     }
 
                     Behavior on jellyOffset {
                         SpringAnimation {
-                            spring: 3
-                            damping: 0.35
+                            spring: 2.2
+                            damping: 0.22
+                        }
+                    }
+
+                    Timer {
+                        id: followTimer
+                        interval: lyricContainer.followDelay
+                        repeat: false
+                        onTriggered: {
+                            lyricContainer.jellyOffset = lyricContainer.jellyTargetOffset;
+                            if (lyricContainer.jellyTargetOffset > 0)
+                                settleTimer.restart();
+                        }
+                    }
+
+                    Timer {
+                        id: settleTimer
+                        interval: 100
+                        repeat: false
+                        onTriggered: lyricContainer.jellyOffset = 0
+                    }
+
+                    HoverHandler {
+                        id: lyricHover
+                    }
+
+                    TapHandler {
+                        onTapped: {
+                            seekProc.command = ["playerctl", "-p", root.mediaPlayer || "spotify,firefox,%any", "position", String(model.time)];
+                            seekProc.running = true;
+                            root.mediaPosition = model.time;
+                            root.currentLyricIndex = index;
                         }
                     }
 
@@ -431,7 +508,7 @@ PopoutWrapper {
                         property real revealOpacity: lyricContainer.revealed ? 1.0 : 0.0
                         Behavior on revealOpacity { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
                         
-                        color: lyricContainer.isActive ? "#ffffff" : Qt.rgba(1, 1, 1, 0.6)
+                        color: lyricContainer.isActive ? Theme.textPrimary : (lyricHover.hovered ? Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.88) : Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.6))
                         font {
                             pixelSize: lyricContainer.isActive ? 18 : 16
                             bold: lyricContainer.isActive
@@ -439,7 +516,7 @@ PopoutWrapper {
                         wrapMode: Text.WordWrap
                         
                         // Визуалы привязаны к позиции на экране, а не к индексу
-                        opacity: revealOpacity * Math.max(0.15, 1.0 - lyricContainer.normalizedDist * 0.85)
+                        opacity: revealOpacity * (lyricContainer.viewY < lyricContainer.focalPoint ? Math.max(0.15, 1.0 - lyricContainer.normalizedDist * 2.15) : Math.max(0.0, 1.0 - lyricContainer.bottomFade * lyricContainer.bottomFade))
                         scale: Math.max(0.92, 1.0 - lyricContainer.normalizedDist * 0.08)
                         transformOrigin: Item.Left
                         
@@ -528,11 +605,6 @@ PopoutWrapper {
     onIsOpenChanged: {
         if (isOpen) {
             mediaPoller.running = true;
-            // Принудительно запускаем волну при каждом открытии попаута
-            if (lyricsModel.count > 0) {
-                root.revealedCount = 0;
-                revealTimer.restart();
-            }
         }
     }
 }

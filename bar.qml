@@ -40,17 +40,18 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "qs-bar"
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: (clockModule.needsKeyboard || todoModule.needsKeyboard) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: (clockModule.needsKeyboard || todoModule.needsKeyboard || ccModule.needsKeyboard) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     visible: !Hyprland.focusedWindow || !Hyprland.focusedWindow.fullscreen
     
     // Маска кликабельности: собираем только те области, которые реально заняты интерфейсом
     mask: Region {
         Region { item: layoutContainer }
         Region { item: wsModule }
-        Region { item: clockModule.popoutItem }
+        Region { item: clockModule.popoutMaskItem }
         Region { item: todoModule.popoutMaskItem }
         Region { item: sysTray }
         Region { item: mathModule.popoutItem }
+        Region { item: ccModule }
         Region { item: ccModule.popoutItem.maskItem }
         Region { item: audioVis.popoutItem }
         Region { item: notifCards }
@@ -75,6 +76,7 @@ PanelWindow {
             ClockModule {
                 id: clockModule
                 anchors.verticalCenter: parent.verticalCenter
+                popoutParent: popupLayer
             }
 
             TodoModule {
@@ -176,10 +178,7 @@ PanelWindow {
         visible: !ccModule.popoutOpen && ccModule.isNotifIsland
         y: {
             if (!ccModule.isNotifIsland) return layoutContainer.height + 8
-            // Island visual bottom = layoutContainer center + island height/2 + translate offset
-            var islandH = ccModule.notifExpanded ? 120 : 64
-            var translateY = ccModule.notifExpanded ? 48 : 18
-            var islandBottom = 32 + islandH / 2 + translateY
+            var islandBottom = layoutContainer.y + rightGroup.y + ccModule.parent.y + ccModule.y + ccModule.implicitHeight
             return islandBottom + 8
         }
         Behavior on y { NumberAnimation { duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingDefaultOut } }

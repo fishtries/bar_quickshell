@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import "../../components"
 import "../../core"
+import "../localsend" as LocalSend
 
 PopoutWrapper {
     id: root
@@ -188,24 +189,6 @@ PopoutWrapper {
                         }
 
                         QuickButton {
-                            icon: "\udb80\udc03"
-                            label: "Settings"
-                            onClicked: {
-                                root.closeRequested()
-                                Hyprland.dispatch("exec env XDG_CURRENT_DESKTOP=GNOME gnome-control-center")
-                            }
-                        }
-
-                        QuickButton {
-                            icon: ""
-                            label: "Media"
-                            onClicked: {
-                                root.closeRequested()
-                                Hyprland.dispatch("exec xdg-open ~/Pictures")
-                            }
-                        }
-
-                        QuickButton {
                             icon: "\uf1d8"
                             label: "LocalSend"
                             onClicked: root.currentPage = "localsend"
@@ -215,7 +198,7 @@ PopoutWrapper {
 
                 Rectangle {
                     width: 1
-                    color: Qt.rgba(1, 1, 1, 0.08)
+                    color: Theme.borderSubtle
                     Layout.fillHeight: true
                 }
 
@@ -235,7 +218,7 @@ PopoutWrapper {
 
                         AppText {
                             text: "Notifications"
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font { pixelSize: 14; bold: true }
                             Layout.fillWidth: true
                         }
@@ -245,13 +228,13 @@ PopoutWrapper {
                             implicitWidth: 28
                             implicitHeight: 28
                             radius: 14
-                            color: clearAllMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
+                            color: clearAllMouse.containsMouse ? Theme.bgHover : Theme.bgSubtle
                             Behavior on color { ColorAnimation { duration: 150 } }
 
                             AppIcon {
                                 anchors.centerIn: parent
                                 text: "󰆴"
-                                color: "#ffffff"
+                                color: Theme.textPrimary
                                 font.pixelSize: 14
                             }
 
@@ -273,7 +256,7 @@ PopoutWrapper {
 
                         Text {
                             text: "No new notifications"
-                            color: "#666666"
+                            color: Theme.textSecondary
                             font.pixelSize: 13
                             anchors.centerIn: parent
                         }
@@ -308,8 +291,8 @@ PopoutWrapper {
                             width: ListView.view ? ListView.view.width : 320
                             height: notificationLayout.implicitHeight + 16
                             radius: 12
-                            color: Qt.rgba(1, 1, 1, notificationMouse.containsMouse ? 0.12 : 0.06)
-                            border.color: notificationMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : "transparent"
+                            color: notificationMouse.containsMouse ? Theme.bgHover : Theme.bgSubtle
+                            border.color: notificationMouse.containsMouse ? Theme.borderSubtle : "transparent"
                             border.width: 1
 
                             property var notificationData: modelData
@@ -352,7 +335,7 @@ PopoutWrapper {
                                         implicitWidth: 20
                                         implicitHeight: 20
                                         radius: 10
-                                        color: dismissMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                        color: dismissMouse.containsMouse ? Theme.bgHover : "transparent"
                                         z: 1
 
                                         AppText {
@@ -442,13 +425,13 @@ PopoutWrapper {
                         implicitWidth: 28
                         implicitHeight: 28
                         radius: 14
-                        color: backMathMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        color: backMathMouse.containsMouse ? Theme.bgHover : "transparent"
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Text {
                             anchors.centerIn: parent
                             text: "←"
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.pixelSize: 16
                         }
 
@@ -463,7 +446,7 @@ PopoutWrapper {
 
                     Text {
                         text: "Math Session"
-                        color: "#ffffff"
+                        color: Theme.textPrimary
                         font { pixelSize: 16; bold: true }
                         Layout.fillWidth: true
                     }
@@ -472,7 +455,7 @@ PopoutWrapper {
                 Rectangle {
                     Layout.fillWidth: true
                     height: 1
-                    color: Qt.rgba(1, 1, 1, 0.1)
+                    color: Theme.borderSubtle
                 }
 
                 AppText {
@@ -490,17 +473,17 @@ PopoutWrapper {
                     RowLayout {
                         spacing: 8
                         Text { text: "•"; color: "#55ff55"; font.bold: true }
-                        Text { text: "Block YouTube & distractions"; color: "#e0e0e0"; font.pixelSize: 12 }
+                        Text { text: "Block YouTube & distractions"; color: Theme.textPrimary; font.pixelSize: 12 }
                     }
                     RowLayout {
                         spacing: 8
                         Text { text: "•"; color: "#55ff55"; font.bold: true }
-                        Text { text: "Enable MATH submap (Hyprland)"; color: "#e0e0e0"; font.pixelSize: 12 }
+                        Text { text: "Enable MATH submap (Hyprland)"; color: Theme.textPrimary; font.pixelSize: 12 }
                     }
                     RowLayout {
                         spacing: 8
                         Text { text: "•"; color: "#55ff55"; font.bold: true }
-                        Text { text: "Start focus music (MPV)"; color: "#e0e0e0"; font.pixelSize: 12 }
+                        Text { text: "Start focus music (MPV)"; color: Theme.textPrimary; font.pixelSize: 12 }
                     }
                 }
 
@@ -514,8 +497,8 @@ PopoutWrapper {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 88
                         radius: 16
-                        color: Qt.rgba(1, 1, 1, 0.06)
-                        border.color: Qt.rgba(1, 1, 1, 0.08)
+                        color: Theme.bgSubtle
+                        border.color: Theme.borderSubtle
                         border.width: 1
 
                         ColumnLayout {
@@ -547,8 +530,8 @@ PopoutWrapper {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 88
                         radius: 16
-                        color: Qt.rgba(1, 1, 1, 0.06)
-                        border.color: Qt.rgba(1, 1, 1, 0.08)
+                        color: Theme.bgSubtle
+                        border.color: Theme.borderSubtle
                         border.width: 1
 
                         ColumnLayout {
@@ -580,8 +563,8 @@ PopoutWrapper {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 88
                         radius: 16
-                        color: Qt.rgba(1, 1, 1, 0.06)
-                        border.color: Qt.rgba(1, 1, 1, 0.08)
+                        color: Theme.bgSubtle
+                        border.color: Theme.borderSubtle
                         border.width: 1
 
                         ColumnLayout {
@@ -613,8 +596,8 @@ PopoutWrapper {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 88
                         radius: 16
-                        color: Qt.rgba(1, 1, 1, 0.06)
-                        border.color: Qt.rgba(1, 1, 1, 0.08)
+                        color: Theme.bgSubtle
+                        border.color: Theme.borderSubtle
                         border.width: 1
 
                         ColumnLayout {
@@ -646,8 +629,8 @@ PopoutWrapper {
                 Rectangle {
                     Layout.fillWidth: true
                     radius: 18
-                    color: Qt.rgba(1, 1, 1, 0.05)
-                    border.color: Qt.rgba(1, 1, 1, 0.08)
+                    color: Theme.bgSubtle
+                    border.color: Theme.borderSubtle
                     border.width: 1
                     implicitHeight: mathStatsPanel.implicitHeight + 28
 
@@ -662,14 +645,14 @@ PopoutWrapper {
                             spacing: 8
 
                             AppText {
-                                text: "Recent Sessions"
+                                text: "Recent Days"
                                 color: Theme.textPrimary
                                 font { pixelSize: 14; bold: true }
                                 Layout.fillWidth: true
                             }
 
                             AppText {
-                                text: MathState.recentSessions.length > 0 ? MathState.recentSessions.length + " tracked" : "Waiting for data"
+                                text: MathState.recentSessions.length > 0 ? MathState.recentSessions.length + " days" : "Waiting for data"
                                 color: Theme.textSecondary
                                 font.pixelSize: 11
                             }
@@ -686,7 +669,40 @@ PopoutWrapper {
                         Item {
                             visible: MathState.recentSessions.length > 0
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 156
+                            Layout.preferredHeight: 178
+
+                            id: mathLineChart
+                            property int hoverIndex: -1
+                            property real chartLeft: 28
+                            property real chartRight: 28
+                            property real chartTop: 28
+                            property real chartBottom: 42
+
+                            function chartSessions() {
+                                return MathState.recentSessions || [];
+                            }
+
+                            function pointX(pointIndex) {
+                                let sessions = chartSessions();
+                                if (sessions.length <= 1)
+                                    return width / 2;
+
+                                return chartLeft + (pointIndex / (sessions.length - 1)) * Math.max(1, width - chartLeft - chartRight);
+                            }
+
+                            function pointY(chars) {
+                                let value = Number(chars);
+                                if (isNaN(value))
+                                    value = 0;
+
+                                let ratio = Math.max(0, Math.min(1, value / root.mathSessionMaxChars()));
+                                return chartTop + (1 - ratio) * Math.max(1, height - chartTop - chartBottom);
+                            }
+
+                            function hoveredSession() {
+                                let sessions = chartSessions();
+                                return hoverIndex >= 0 && hoverIndex < sessions.length ? sessions[hoverIndex] : null;
+                            }
 
                             Rectangle {
                                 anchors.left: parent.left
@@ -696,66 +712,202 @@ PopoutWrapper {
                                 color: Qt.rgba(1, 1, 1, 0.08)
                             }
 
-                            RowLayout {
+                            Canvas {
+                                id: mathLineCanvas
                                 anchors.fill: parent
-                                spacing: 8
+                                antialiasing: true
 
-                                Repeater {
-                                    model: MathState.recentSessions
+                                onPaint: {
+                                    let ctx = getContext("2d");
+                                    let sessions = MathState.recentSessions || [];
 
-                                    delegate: Item {
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
+                                    ctx.clearRect(0, 0, width, height);
 
-                                        property var sessionData: modelData
-                                        property real sessionChars: Number(sessionData && sessionData.chars !== undefined ? sessionData.chars : 0)
-                                        property int sessionFormulas: Number(sessionData && sessionData.formulas !== undefined ? sessionData.formulas : 0)
-                                        property bool isLatest: index === MathState.recentSessions.length - 1
+                                    if (sessions.length === 0)
+                                        return;
 
-                                        ColumnLayout {
-                                            anchors.fill: parent
-                                            spacing: 6
+                                    ctx.lineWidth = 1;
+                                    ctx.strokeStyle = "rgba(255,255,255,0.07)";
 
-                                            AppText {
-                                                Layout.fillWidth: true
-                                                text: Math.round(sessionChars)
-                                                color: isLatest ? Theme.textPrimary : Theme.textSecondary
-                                                font.pixelSize: 10
-                                                horizontalAlignment: Text.AlignHCenter
-                                            }
+                                    for (let gridIndex = 0; gridIndex < 3; ++gridIndex) {
+                                        let gridY = mathLineChart.chartTop + gridIndex * ((height - mathLineChart.chartTop - mathLineChart.chartBottom) / 2);
+                                        ctx.beginPath();
+                                        ctx.moveTo(mathLineChart.chartLeft, gridY);
+                                        ctx.lineTo(width - mathLineChart.chartRight, gridY);
+                                        ctx.stroke();
+                                    }
 
-                                            Item {
-                                                Layout.fillWidth: true
-                                                Layout.fillHeight: true
+                                    if (sessions.length === 1) {
+                                        let onlySession = sessions[0] || {};
+                                        let onlyY = mathLineChart.pointY(onlySession.chars !== undefined ? onlySession.chars : 0);
 
-                                                Rectangle {
-                                                    anchors.bottom: parent.bottom
-                                                    anchors.horizontalCenter: parent.horizontalCenter
-                                                    width: Math.min(28, Math.max(16, parent.width * 0.45))
-                                                    height: sessionChars > 0 ? Math.max(12, (sessionChars / root.mathSessionMaxChars()) * (parent.height - 4)) : 6
-                                                    radius: width / 2
-                                                    color: isLatest ? Theme.info : Qt.rgba(1, 1, 1, 0.18)
-                                                    opacity: sessionChars > 0 ? 1.0 : 0.45
-                                                }
-                                            }
+                                        ctx.beginPath();
+                                        ctx.moveTo(mathLineChart.chartLeft, onlyY);
+                                        ctx.lineTo(width - mathLineChart.chartRight, onlyY);
+                                        ctx.strokeStyle = "rgba(85,200,255,0.45)";
+                                        ctx.lineWidth = 3;
+                                        ctx.lineCap = "round";
+                                        ctx.stroke();
+                                        return;
+                                    }
 
-                                            AppText {
-                                                Layout.fillWidth: true
-                                                text: root.formatMathSessionDate(sessionData && sessionData.date ? sessionData.date : "")
-                                                color: Theme.textSecondary
-                                                font.pixelSize: 10
-                                                horizontalAlignment: Text.AlignHCenter
-                                            }
+                                    let gradient = ctx.createLinearGradient(0, mathLineChart.chartTop, 0, height - mathLineChart.chartBottom);
+                                    gradient.addColorStop(0, "rgba(85,200,255,0.22)");
+                                    gradient.addColorStop(1, "rgba(85,200,255,0.00)");
 
-                                            AppText {
-                                                Layout.fillWidth: true
-                                                text: sessionFormulas > 0 ? sessionFormulas + " f" : ""
-                                                color: Theme.textSecondary
-                                                font.pixelSize: 10
-                                                horizontalAlignment: Text.AlignHCenter
-                                                visible: text !== ""
-                                            }
+                                    ctx.beginPath();
+                                    for (let i = 0; i < sessions.length; ++i) {
+                                        let session = sessions[i] || {};
+                                        let x = mathLineChart.pointX(i);
+                                        let y = mathLineChart.pointY(session.chars !== undefined ? session.chars : 0);
+
+                                        if (i === 0)
+                                            ctx.moveTo(x, y);
+                                        else
+                                            ctx.lineTo(x, y);
+                                    }
+
+                                    ctx.lineTo(mathLineChart.pointX(sessions.length - 1), height - mathLineChart.chartBottom);
+                                    ctx.lineTo(mathLineChart.pointX(0), height - mathLineChart.chartBottom);
+                                    ctx.closePath();
+                                    ctx.fillStyle = gradient;
+                                    ctx.fill();
+
+                                    ctx.beginPath();
+                                    for (let lineIndex = 0; lineIndex < sessions.length; ++lineIndex) {
+                                        let lineSession = sessions[lineIndex] || {};
+                                        let lineX = mathLineChart.pointX(lineIndex);
+                                        let lineY = mathLineChart.pointY(lineSession.chars !== undefined ? lineSession.chars : 0);
+
+                                        if (lineIndex === 0)
+                                            ctx.moveTo(lineX, lineY);
+                                        else
+                                            ctx.lineTo(lineX, lineY);
+                                    }
+
+                                    ctx.strokeStyle = "#55c8ff";
+                                    ctx.lineWidth = 3;
+                                    ctx.lineCap = "round";
+                                    ctx.lineJoin = "round";
+                                    ctx.stroke();
+                                }
+
+                                onWidthChanged: requestPaint()
+                                onHeightChanged: requestPaint()
+                            }
+
+                            Connections {
+                                target: MathState
+                                function onRecentSessionsChanged() {
+                                    mathLineCanvas.requestPaint();
+                                }
+                            }
+
+                            Repeater {
+                                model: MathState.recentSessions
+
+                                delegate: Item {
+                                    width: 34
+                                    height: 34
+                                    x: mathLineChart.pointX(index) - width / 2
+                                    y: mathLineChart.pointY(sessionChars) - height / 2
+                                    z: 3
+
+                                    property var sessionData: modelData
+                                    property real sessionChars: Number(sessionData && sessionData.chars !== undefined ? sessionData.chars : 0)
+                                    property int sessionFormulas: Number(sessionData && sessionData.formulas !== undefined ? sessionData.formulas : 0)
+                                    property int sessionCount: Number(sessionData && sessionData.sessions !== undefined ? sessionData.sessions : 1)
+                                    property bool isLatest: index === MathState.recentSessions.length - 1
+
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: pointMouse.containsMouse ? 18 : 12
+                                        height: width
+                                        radius: width / 2
+                                        color: isLatest ? Theme.info : "#55c8ff"
+                                        border.color: Theme.textPrimary
+                                        border.width: pointMouse.containsMouse ? 2 : 0
+                                        Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
+                                    }
+
+                                    MouseArea {
+                                        id: pointMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onEntered: mathLineChart.hoverIndex = index
+                                        onExited: {
+                                            if (mathLineChart.hoverIndex === index)
+                                                mathLineChart.hoverIndex = -1;
                                         }
+                                    }
+                                }
+                            }
+
+                            Repeater {
+                                model: MathState.recentSessions
+
+                                delegate: AppText {
+                                    width: 54
+                                    x: mathLineChart.pointX(index) - width / 2
+                                    y: mathLineChart.height - mathLineChart.chartBottom + 12
+                                    text: root.formatMathSessionDate(modelData && modelData.date ? modelData.date : "")
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 10
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                            }
+
+                            Rectangle {
+                                id: mathPointTooltip
+                                visible: mathLineChart.hoverIndex >= 0
+                                z: 10
+                                width: 184
+                                height: mathPointTooltipLayout.implicitHeight + 20
+                                radius: 14
+                                color: Qt.rgba(0.05, 0.05, 0.05, 0.94)
+                                border.color: Qt.rgba(1, 1, 1, 0.12)
+                                border.width: 1
+                                x: Math.max(0, Math.min(parent.width - width, mathLineChart.pointX(mathLineChart.hoverIndex) - width / 2))
+                                y: Math.max(0, mathLineChart.pointY(pointChars) - height - 10)
+
+                                property var pointData: mathLineChart.hoveredSession()
+                                property int pointChars: Number(pointData && pointData.chars !== undefined ? pointData.chars : 0)
+                                property int pointFormulas: Number(pointData && pointData.formulas !== undefined ? pointData.formulas : 0)
+                                property int pointSessions: Number(pointData && pointData.sessions !== undefined ? pointData.sessions : 1)
+
+                                ColumnLayout {
+                                    id: mathPointTooltipLayout
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 5
+
+                                    AppText {
+                                        Layout.fillWidth: true
+                                        text: root.formatMathSessionDate(mathPointTooltip.pointData && mathPointTooltip.pointData.date ? mathPointTooltip.pointData.date : "")
+                                        color: Theme.textPrimary
+                                        font { pixelSize: 13; bold: true }
+                                    }
+
+                                    AppText {
+                                        Layout.fillWidth: true
+                                        text: mathPointTooltip.pointChars + " symbols"
+                                        color: Theme.textSecondary
+                                        font.pixelSize: 11
+                                    }
+
+                                    AppText {
+                                        Layout.fillWidth: true
+                                        text: mathPointTooltip.pointFormulas + " formulas"
+                                        color: Theme.textSecondary
+                                        font.pixelSize: 11
+                                    }
+
+                                    AppText {
+                                        Layout.fillWidth: true
+                                        text: mathPointTooltip.pointSessions + (mathPointTooltip.pointSessions === 1 ? " session" : " sessions")
+                                        color: Theme.textSecondary
+                                        font.pixelSize: 11
                                     }
                                 }
                             }
@@ -852,13 +1004,13 @@ PopoutWrapper {
                         implicitWidth: 28
                         implicitHeight: 28
                         radius: 14
-                        color: backWifiMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        color: backWifiMouse.containsMouse ? Theme.bgHover : "transparent"
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Text {
                             anchors.centerIn: parent
                             text: "←"
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.pixelSize: 16
                         }
 
@@ -873,7 +1025,7 @@ PopoutWrapper {
 
                     Text {
                         text: "Wi-Fi"
-                        color: "#ffffff"
+                        color: Theme.textPrimary
                         font { pixelSize: 16; bold: true }
                         Layout.fillWidth: true
                     }
@@ -882,7 +1034,7 @@ PopoutWrapper {
                 Rectangle {
                     Layout.fillWidth: true
                     height: 1
-                    color: Qt.rgba(1, 1, 1, 0.1)
+                    color: Theme.borderSubtle
                 }
 
                 // Статус текущего подключения
@@ -892,13 +1044,13 @@ PopoutWrapper {
 
                     Text {
                         text: root.wifiConnected ? "\udb82\udd28" : "\udb82\udd2b"
-                        color: root.wifiConnected ? "#ffffff" : "#717171"
+                        color: root.wifiConnected ? Theme.textPrimary : Theme.textSecondary
                         font { pixelSize: 20; bold: true }
                     }
 
                     Text {
                         text: root.wifiConnected ? "Connected to " + root.wifiEssid : "Disconnected"
-                        color: "#e0e0e0"
+                        color: Theme.textPrimary
                         font.pixelSize: 14
                         Layout.fillWidth: true
                         elide: Text.ElideRight
@@ -909,7 +1061,7 @@ PopoutWrapper {
                         implicitWidth: 70
                         implicitHeight: 26
                         radius: 13
-                        color: wifiDisconnMouse.containsMouse ? Qt.rgba(1, 0, 0, 0.15) : Qt.rgba(1, 1, 1, 0.08)
+                        color: wifiDisconnMouse.containsMouse ? Qt.rgba(1, 0, 0, 0.15) : Theme.bgHover
                         border.color: wifiDisconnMouse.containsMouse ? Qt.rgba(1, 0, 0, 0.3) : "transparent"
                         Behavior on color { ColorAnimation { duration: 150 } }
                         Behavior on border.color { ColorAnimation { duration: 150 } }
@@ -940,7 +1092,7 @@ PopoutWrapper {
                     Layout.fillWidth: true
                     implicitHeight: availNetCol.implicitHeight + 16
                     radius: 10
-                    color: Qt.rgba(1, 1, 1, 0.03)
+                    color: Theme.bgSubtle
                     visible: wifiAvailModel.count > 0
 
                     ColumnLayout {
@@ -953,7 +1105,7 @@ PopoutWrapper {
 
                         Text {
                             text: "Available Networks"
-                            color: "#888888"
+                            color: Theme.textSecondary
                             font { pixelSize: 11; bold: true }
                         }
 
@@ -965,7 +1117,7 @@ PopoutWrapper {
                                 Layout.fillWidth: true
                                 implicitHeight: 32
                                 radius: 6
-                                color: wifiNetMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+                                color: wifiNetMouse.containsMouse ? Theme.bgHover : "transparent"
                                 clip: true
 
                                 required property var modelData
@@ -1003,13 +1155,13 @@ PopoutWrapper {
 
                                     Text {
                                         text: "\udb82\udd28"
-                                        color: wifiNetRect.isPending ? "#ffffff" : "#888888"
+                                        color: wifiNetRect.isPending ? Theme.textPrimary : Theme.textSecondary
                                         font.pixelSize: 14
                                         Behavior on color { ColorAnimation { duration: 300 } }
                                     }
                                     Text {
                                         text: modelData.ssid || ""
-                                        color: wifiNetRect.isPending ? "#ffffff" : "#a0a0a0"
+                                        color: wifiNetRect.isPending ? Theme.textPrimary : Theme.textSecondary
                                         font.pixelSize: 13
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
@@ -1078,13 +1230,13 @@ PopoutWrapper {
                         implicitWidth: 28
                         implicitHeight: 28
                         radius: 14
-                        color: backBtMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        color: backBtMouse.containsMouse ? Theme.bgHover : "transparent"
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         Text {
                             anchors.centerIn: parent
                             text: "←"
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.pixelSize: 16
                         }
 
@@ -1099,7 +1251,7 @@ PopoutWrapper {
 
                     Text {
                         text: "Bluetooth"
-                        color: "#ffffff"
+                        color: Theme.textPrimary
                         font { pixelSize: 16; bold: true }
                         Layout.fillWidth: true
                     }
@@ -1108,7 +1260,7 @@ PopoutWrapper {
                 Rectangle {
                     Layout.fillWidth: true
                     height: 1
-                    color: Qt.rgba(1, 1, 1, 0.1)
+                    color: Theme.borderSubtle
                 }
 
                 // Статус BT
@@ -1118,7 +1270,7 @@ PopoutWrapper {
 
                     Text {
                         text: root.btStatus === "off" ? "\udb80\udcb2" : "\udb80\udcaf"
-                        color: root.btStatus !== "off" ? "#ffffff" : "#717171"
+                        color: root.btStatus !== "off" ? Theme.textPrimary : Theme.textSecondary
                         font { pixelSize: 20; bold: true }
                     }
 
@@ -1130,7 +1282,7 @@ PopoutWrapper {
                                 default: return "Bluetooth Off";
                             }
                         }
-                        color: "#e0e0e0"
+                        color: Theme.textPrimary
                         font.pixelSize: 14
                         Layout.fillWidth: true
                     }
@@ -1141,7 +1293,7 @@ PopoutWrapper {
                     Layout.fillWidth: true
                     implicitHeight: btConnCol.implicitHeight + 16
                     radius: 10
-                    color: Qt.rgba(1, 1, 1, 0.03)
+                    color: Theme.bgSubtle
                     visible: btConnectedModel.count > 0
 
                     ColumnLayout {
@@ -1154,7 +1306,7 @@ PopoutWrapper {
 
                         Text {
                             text: "Connected"
-                            color: "#888888"
+                            color: Theme.textSecondary
                             font { pixelSize: 11; bold: true }
                         }
 
@@ -1166,7 +1318,7 @@ PopoutWrapper {
                                 Layout.fillWidth: true
                                 implicitHeight: 32
                                 radius: 6
-                                color: btConnMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+                                color: btConnMouse.containsMouse ? Theme.bgHover : "transparent"
                                 clip: true
 
                                 required property var modelData
@@ -1201,10 +1353,10 @@ PopoutWrapper {
                                     anchors.rightMargin: 4
                                     spacing: 8
 
-                                    Text { text: "\udb80\udcaf"; color: "#ffffff"; font.pixelSize: 14 }
+                                    Text { text: "\udb80\udcaf"; color: Theme.textPrimary; font.pixelSize: 14 }
                                     Text {
                                         text: modelData.name || ""
-                                        color: "#ffffff"
+                                        color: Theme.textPrimary
                                         font.pixelSize: 13
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
@@ -1231,7 +1383,7 @@ PopoutWrapper {
                     Layout.fillWidth: true
                     implicitHeight: btPairedCol.implicitHeight + 16
                     radius: 10
-                    color: Qt.rgba(1, 1, 1, 0.03)
+                    color: Theme.bgSubtle
                     visible: btPairedModel.count > 0
 
                     ColumnLayout {
@@ -1244,7 +1396,7 @@ PopoutWrapper {
 
                         Text {
                             text: "Paired Devices"
-                            color: "#888888"
+                            color: Theme.textSecondary
                             font { pixelSize: 11; bold: true }
                         }
 
@@ -1256,7 +1408,7 @@ PopoutWrapper {
                                 Layout.fillWidth: true
                                 implicitHeight: 32
                                 radius: 6
-                                color: btPairedMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+                                color: btPairedMouse.containsMouse ? Theme.bgHover : "transparent"
                                 clip: true
 
                                 required property var modelData
@@ -1293,13 +1445,13 @@ PopoutWrapper {
 
                                     Text {
                                         text: "\udb80\udcaf"
-                                        color: btPairedRect.isPending ? "#ffffff" : "#888888"
+                                        color: btPairedRect.isPending ? Theme.textPrimary : Theme.textSecondary
                                         font.pixelSize: 14
                                         Behavior on color { ColorAnimation { duration: 300 } }
                                     }
                                     Text {
                                         text: modelData.name || ""
-                                        color: btPairedRect.isPending ? "#ffffff" : "#a0a0a0"
+                                        color: btPairedRect.isPending ? Theme.textPrimary : Theme.textSecondary
                                         font.pixelSize: 13
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
@@ -1327,13 +1479,13 @@ PopoutWrapper {
                     Layout.fillWidth: true
                     implicitHeight: 36
                     radius: 10
-                    color: btSettingsMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
+                    color: btSettingsMouse.containsMouse ? Theme.bgHover : Theme.bgSubtle
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     Text {
                         anchors.centerIn: parent
                         text: "Open Bluetooth Manager"
-                        color: "#ffffff"
+                        color: Theme.textPrimary
                         font.pixelSize: 13
                     }
 
@@ -1375,7 +1527,7 @@ PopoutWrapper {
                 blur: lsPageItem.targetBlur
             }
 
-            LocalSendPage {
+            LocalSend.LocalSendPage {
                 id: lsPage
                 anchors.left: parent.left
                 anchors.right: parent.right

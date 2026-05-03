@@ -94,7 +94,7 @@ Row {
                     default: return "\udb80\udcb2"
                 }
             }
-            color: (root.displayBtStatus === "on" || root.displayBtStatus === "connected") ? Theme.textDark : Theme.textSecondary
+            color: (root.displayBtStatus === "on" || root.displayBtStatus === "connected") ? Theme.foregroundForItem(btIcon) : Theme.secondaryForegroundForItem(btIcon)
             font { pixelSize: 18; bold: true }
             Behavior on color { ColorAnimation { duration: AnimationConfig.durationNormal } }
 
@@ -130,7 +130,7 @@ Row {
             property real blurValue: 0.0
 
             text: NetworkState.wifiConnected ? "\udb82\udd28" : "\udb82\udd2b"
-            color: NetworkState.wifiConnected ? Theme.textDark : Theme.textSecondary
+            color: NetworkState.wifiConnected ? Theme.foregroundForItem(wifiIcon) : Theme.secondaryForegroundForItem(wifiIcon)
             font { pixelSize: 18; bold: true }
             Behavior on color { ColorAnimation { duration: AnimationConfig.durationNormal } }
 

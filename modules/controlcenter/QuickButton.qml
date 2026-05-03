@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "../../core"
 
 // Компактная квадратная кнопка-плитка для Control Center.
 // Использование:
@@ -19,10 +20,10 @@ Rectangle {
     implicitHeight: 80
     radius: 14
     color: mouse.containsMouse
-        ? Qt.rgba(1, 1, 1, isActive ? 0.18 : 0.1)
-        : Qt.rgba(1, 1, 1, isActive ? 0.12 : 0.05)
+        ? (isActive ? Theme.bgActive : Theme.bgHover)
+        : (isActive ? Theme.bgActive : Theme.bgSubtle)
 
-    border.color: isActive ? Qt.rgba(1, 1, 1, 0.2) : "transparent"
+    border.color: isActive ? Theme.borderStrong : "transparent"
     border.width: 1
 
     Behavior on color { ColorAnimation { duration: 150 } }
@@ -37,7 +38,7 @@ Rectangle {
 
         Text {
             text: root.icon
-            color: root.isActive ? "#ffffff" : "#888888"
+            color: root.isActive ? Theme.textPrimary : Theme.textSecondary
             font.pixelSize: 22
             Layout.alignment: Qt.AlignHCenter
             Behavior on color { ColorAnimation { duration: 200 } }
@@ -45,7 +46,7 @@ Rectangle {
 
         Text {
             text: root.label
-            color: root.isActive ? "#e0e0e0" : "#666666"
+            color: root.isActive ? Theme.textPrimary : Theme.textSecondary
             font.pixelSize: 10
             font.bold: true
             Layout.alignment: Qt.AlignHCenter

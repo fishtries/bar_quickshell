@@ -8,12 +8,15 @@ Rectangle {
 
     property string statusText: ""
     property string primaryActionLabel: ""
+    property string secondaryActionLabel: ""
+    property string secondaryActionShortcut: ""
     property string escapeActionLabel: ""
 
     signal primaryTriggered()
+    signal secondaryTriggered()
 
     radius: 18
-    color: Qt.rgba(1, 1, 1, 0.04)
+    color: Theme.bgSubtle
     implicitHeight: 42
 
     RowLayout {
@@ -33,7 +36,7 @@ Rectangle {
         Rectangle {
             visible: root.primaryActionLabel !== ""
             radius: 10
-            color: Qt.rgba(1, 1, 1, 0.08)
+            color: Theme.bgHover
             implicitWidth: primaryLabel.implicitWidth + 14
             implicitHeight: 24
 
@@ -53,9 +56,31 @@ Rectangle {
         }
 
         Rectangle {
+            visible: root.secondaryActionLabel !== ""
+            radius: 10
+            color: Theme.bgHover
+            implicitWidth: secondaryLabel.implicitWidth + 14
+            implicitHeight: 24
+
+            AppText {
+                id: secondaryLabel
+                anchors.centerIn: parent
+                text: (root.secondaryActionShortcut !== "" ? root.secondaryActionShortcut + " " : "") + root.secondaryActionLabel
+                color: Theme.textSecondary
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.secondaryTriggered()
+            }
+        }
+
+        Rectangle {
             visible: root.escapeActionLabel !== ""
             radius: 10
-            color: Qt.rgba(1, 1, 1, 0.08)
+            color: Theme.bgHover
             implicitWidth: escapeLabel.implicitWidth + 14
             implicitHeight: 24
 

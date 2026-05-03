@@ -11,12 +11,17 @@ Item {
     
     property bool popoutOpen: false
     property Item popoutItem: popout
-    property bool needsKeyboard: false
+    property Item popoutMaskItem: popout.maskItem
+    property Item popoutParent: null
+    property bool needsKeyboard: popout.needsKeyboard
+    readonly property Item effectivePopoutParent: popoutParent ? popoutParent : root
+    readonly property real effectiveHeight: root.height > 0 ? root.height : root.implicitHeight
+    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, 0, root.effectiveHeight + 8)
 
     AppText {
         id: timeText
         anchors.centerIn: parent
-        color: Theme.textDark
+        color: Theme.foregroundForItem(timeText)
         font {
             pixelSize: 24
             weight: Font.Black
@@ -37,13 +42,14 @@ Item {
 
     ClockPopout {
         id: popout
+        parent: root.effectivePopoutParent
         isOpen: root.popoutOpen
         onCloseRequested: root.popoutOpen = false
         
         // Позиционирование под часами (выравнивание по левому краю)
-        anchors.top: parent.bottom
-        anchors.topMargin: 8
-        anchors.left: parent.left
+        x: root.popoutPosition.x
+        y: root.popoutPosition.y
+        z: 1000
         
         // Точка вылета анимации пузыря (смещена влево к часам)
         originX: 22

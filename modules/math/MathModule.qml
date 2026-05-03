@@ -39,7 +39,7 @@ Item {
         // Позиционирование по центру родителя (Item 36px высотой)
         anchors.centerIn: parent
         
-        color: root.isActive ? Qt.rgba(0, 0, 0, 0.2) : Qt.rgba(0, 0, 0, 0.3)
+        color: root.isActive ? Theme.localPanelForItem(barContainer) : Qt.rgba(0, 0, 0, 0)
 
         Behavior on width { NumberAnimation { duration: 700; easing.type: Easing.OutExpo} }
         Behavior on height { NumberAnimation { duration: 700; easing.type: Easing.OutExpo} }
@@ -72,7 +72,7 @@ Item {
                 width: 130
                 height: 24
                 radius: 12
-                color: Qt.rgba(1, 1, 1, 0.1)
+                color: Theme.localHoverForItem(barContainer)
                 border.color: root.isReady ? "#55ff55" : "transparent"
                 border.width: root.isReady ? 1 : 0
                 clip: true
@@ -83,7 +83,7 @@ Item {
                     anchors.bottom: parent.bottom
                     width: parent.width * Math.max(0, Math.min(1, root.progress))
                     radius: parent.radius
-                    color: root.isReady ? "#55ff55" : "#ffffff"
+                    color: root.isReady ? "#55ff55" : Theme.foregroundForItem(barContainer)
                     
                     Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.OutQuad } }
                     Behavior on color { ColorAnimation { duration: 500 } }
@@ -92,7 +92,7 @@ Item {
                 AppText {
                     anchors.centerIn: parent
                     text: Math.round(root.progress * 100) + "%"
-                    color: root.isReady ? Theme.textDark : Theme.textPrimary
+                    color: Theme.inverseForegroundForItem(barContainer)
                     font.pixelSize: 12
                     font.bold: true
                     opacity: barContainer.width > 100 ? 1.0 : 0.0 

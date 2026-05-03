@@ -18,6 +18,11 @@ Item {
     // Notifications that have already been shown in the island.
     // Used to prevent re-showing them as cards or cycling through them again.
     property var presentedNotifs: []
+    property var stackNotifications: []
+    property int stackRevision: 0
+    property var notificationRefs: []
+    property var notificationIds: []
+    property int nextNotificationId: 1
 
     function markPresented(notif) {
         if (notif && !isPresented(notif))
@@ -26,6 +31,94 @@ Item {
 
     function isPresented(notif) {
         return presentedNotifs.indexOf(notif) !== -1
+    }
+
+    function notificationUid(notif) {
+        if (!notif)
+            return 0
+
+        var index = notificationRefs.indexOf(notif)
+        if (index !== -1)
+            return notificationIds[index]
+
+        var uid = nextNotificationId
+        nextNotificationId += 1
+        notificationRefs = notificationRefs.concat(notif)
+        notificationIds = notificationIds.concat(uid)
+        return uid
+    }
+
+    function syncNotificationRefs() {
+        var items = activeNotifications.values
+        if (!items)
+            items = []
+
+        var cleanedPresented = []
+        for (var i = 0; i < presentedNotifs.length; i++) {
+            if (items.indexOf(presentedNotifs[i]) !== -1)
+                cleanedPresented.push(presentedNotifs[i])
+        }
+        presentedNotifs = cleanedPresented
+
+        var cleanedRefs = []
+        var cleanedIds = []
+        for (var j = 0; j < notificationRefs.length; j++) {
+            if (items.indexOf(notificationRefs[j]) !== -1) {
+                cleanedRefs.push(notificationRefs[j])
+                cleanedIds.push(notificationIds[j])
+            }
+        }
+        notificationRefs = cleanedRefs
+        notificationIds = cleanedIds
+
+        var cleanedStack = []
+        for (var k = 0; k < stackNotifications.length; k++) {
+            if (items.indexOf(stackNotifications[k]) !== -1)
+                cleanedStack.push(stackNotifications[k])
+        }
+        if (cleanedStack.length !== stackNotifications.length) {
+            stackNotifications = cleanedStack
+            stackRevision += 1
+        }
+    }
+
+    function pushStackNotification(notif) {
+        if (!notif || stackNotifications.indexOf(notif) !== -1)
+            return
+
+        notificationUid(notif)
+        stackNotifications = stackNotifications.concat(notif)
+        stackRevision += 1
+    }
+
+    function removeStackNotification(notif) {
+        var index = stackNotifications.indexOf(notif)
+        if (index === -1)
+            return
+
+        var next = stackNotifications.slice()
+        next.splice(index, 1)
+        stackNotifications = next
+        stackRevision += 1
+    }
+
+    function takeNextStackNotification() {
+        if (stackNotifications.length === 0)
+            return null
+
+        var notification = stackNotifications[0]
+        var next = stackNotifications.slice(1)
+        stackNotifications = next
+        stackRevision += 1
+        return notification
+    }
+
+    function clearStackNotifications() {
+        if (stackNotifications.length === 0)
+            return
+
+        stackNotifications = []
+        stackRevision += 1
     }
 
     function findNextUnpresented(skipNotif) {
@@ -56,22 +149,14 @@ Item {
         bodySupported: true
         bodyMarkupSupported: true
         actionsSupported: true
+        inlineReplySupported: true
         imageSupported: true
 
         // Auto-track every incoming notification so it appears in trackedNotifications
         onNotification: function(notification) {
             notification.tracked = true;
+            root.syncNotificationRefs()
             root.newNotification(notification);
-            // Clean stale refs from presentedNotifs (dismissed notifications)
-            var items = root.activeNotifications.values
-            if (items && root.presentedNotifs && root.presentedNotifs.length > 0) {
-                var cleaned = []
-                for (var j = 0; j < root.presentedNotifs.length; j++) {
-                    if (items.indexOf(root.presentedNotifs[j]) !== -1)
-                        cleaned.push(root.presentedNotifs[j])
-                }
-                root.presentedNotifs = cleaned
-            }
         }
     }
 

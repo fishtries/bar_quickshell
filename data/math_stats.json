@@ -1,0 +1,37 @@
+{
+    "total_chars": 21176,
+    "total_formulas": 441,
+    "sessions_completed": 8,
+    "streak_days": 4,
+    "last_session_date": "2026-04-29",
+    "recent_sessions": [
+        {
+            "date": "2026-04-26",
+            "chars": 666,
+            "formulas": 22,
+            "sessions": 1,
+            "completed_at": "17:22"
+        },
+        {
+            "date": "2026-04-27",
+            "chars": 2481,
+            "formulas": 40,
+            "sessions": 1,
+            "completed_at": "17:49"
+        },
+        {
+            "date": "2026-04-28",
+            "chars": 9126,
+            "formulas": 59,
+            "sessions": 4,
+            "completed_at": "17:48"
+        },
+        {
+            "date": "2026-04-29",
+            "chars": 903,
+            "formulas": 0,
+            "sessions": 1,
+            "completed_at": "16:51"
+        }
+    ]
+}

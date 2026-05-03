@@ -1,0 +1,2 @@
+singleton LocalSendState LocalSendState.qml
+LocalSendPage LocalSendPage.qml

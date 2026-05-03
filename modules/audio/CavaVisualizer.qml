@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import QtQuick.Effects
+import "../../core"
 
 Item {
     id: root
@@ -86,7 +87,7 @@ Item {
                     width: 10
                     height: Math.max(4, (root.values[index] / 100) * parent.height)
                     anchors.bottom: parent.bottom
-                    color: "#000000"
+                    color: Theme.foregroundForItem(parent)
                     radius: 2
                     
                     Behavior on height { 

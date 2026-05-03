@@ -94,6 +94,22 @@ def main():
         if list_name:
             task["list"] = list_name
         data.setdefault(target_date_key, []).append(task)
+    elif action == "edit":
+        if len(sys.argv) < 12:
+            raise SystemExit(1)
+
+        target_date_key = sys.argv[8]
+        target_time = sys.argv[9]
+        new_title = sys.argv[10].strip()
+        new_list_name = sys.argv[11].strip()
+
+        if not new_title:
+            raise SystemExit(1)
+
+        task["title"] = new_title
+        task["time"] = target_time
+        task["list"] = new_list_name
+        data.setdefault(target_date_key, []).append(task)
     elif action != "complete":
         raise SystemExit(1)
 

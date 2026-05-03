@@ -23,10 +23,20 @@ PanelWindow {
     property real contentRevealProgress: 0.0
     property bool opened: false
     property bool closing: false
-    readonly property real searchWidth: Math.max(560, Math.min(720, width - 120))
+    readonly property bool clipboardMode: searchState ? searchState.clipboardMode : false
+    readonly property bool wallpaperMode: searchState ? searchState.wallpaperMode : false
+    property real clipboardTransitionProgress: clipboardMode ? 1.0 : 0.0
+    property real wallpaperTransitionProgress: wallpaperMode ? 1.0 : 0.0
+    readonly property real normalSearchWidth: Math.max(560, Math.min(720, width - 120))
+    readonly property real clipboardSearchWidth: Math.max(720, Math.min(860, width - 120))
+    readonly property real wallpaperSearchWidth: Math.max(760, Math.min(920, width - 120))
+    readonly property real searchWidth: lerp(lerp(normalSearchWidth, clipboardSearchWidth, clipboardTransitionProgress), wallpaperSearchWidth, wallpaperTransitionProgress)
     readonly property real searchHeight: input.implicitHeight
     readonly property real contentGap: 10
-    readonly property real contentHeight: Math.max(280, Math.min(450, height - 180))
+    readonly property real normalContentHeight: Math.max(280, Math.min(450, height - 180))
+    readonly property real clipboardContentHeight: Math.max(430, Math.min(560, height - 160))
+    readonly property real wallpaperContentHeight: Math.max(360, Math.min(440, height - 160))
+    readonly property real contentHeight: lerp(lerp(normalContentHeight, clipboardContentHeight, clipboardTransitionProgress), wallpaperContentHeight, wallpaperTransitionProgress)
     readonly property real launcherHeight: searchHeight + contentGap + contentHeight
     readonly property real finalSearchX: (width - searchWidth) * 0.5
     readonly property real finalSearchRightX: finalSearchX + searchWidth
@@ -112,7 +122,12 @@ PanelWindow {
     }
 
     function syncListPosition() {
-        results.ensureCurrentVisible()
+        if (clipboardMode)
+            clipboardView.ensureCurrentVisible()
+        else if (wallpaperMode)
+            wallpaperGallery.ensureCurrentVisible()
+        else
+            results.ensureCurrentVisible()
     }
 
     function openLauncher() {
@@ -218,6 +233,20 @@ PanelWindow {
             focusInput()
     }
 
+    Behavior on clipboardTransitionProgress {
+        NumberAnimation {
+            duration: AnimationConfig.durationModerate
+            easing.type: AnimationConfig.easingMovement
+        }
+    }
+
+    Behavior on wallpaperTransitionProgress {
+        NumberAnimation {
+            duration: AnimationConfig.durationModerate
+            easing.type: AnimationConfig.easingMovement
+        }
+    }
+
     ParallelAnimation {
         id: closeSequence
 
@@ -249,7 +278,7 @@ PanelWindow {
             root.closing = false
 
             if (root.searchState)
-                root.searchState.clearQuery()
+                root.searchState.resetForClose()
 
             root.visible = false
             root.closeRequested()
@@ -287,9 +316,9 @@ PanelWindow {
                     width: root.orbDiameter
                     height: width
                     radius: width * 0.5
-                    color: Qt.rgba(0, 0, 0, 0.94)
+                    color: Theme.bgElevated
                     border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.12)
+                    border.color: Theme.borderSubtle
                 }
 
                 Rectangle {
@@ -297,7 +326,7 @@ PanelWindow {
                     width: root.orbDiameter + 18
                     height: width
                     radius: width * 0.5
-                    color: Qt.rgba(1, 1, 1, 0.05)
+                    color: Theme.bgHover
                 }
             }
 
@@ -309,9 +338,9 @@ PanelWindow {
                 height: root.searchShellHeight
                 radius: root.searchShellRadius
                 opacity: root.searchShellOpacity
-                color: Qt.rgba(0, 0, 0, 0.94)
+                color: Theme.bgElevated
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.12)
+                border.color: Theme.borderSubtle
                 clip: true
                 z: 3
 
@@ -320,7 +349,7 @@ PanelWindow {
                     anchors.fill: parent
                     textValue: searchState ? searchState.query : ""
                     placeholderText: searchState ? searchState.placeholderText : "Search"
-                    busy: searchState ? (searchState.loadingCatalog || searchState.loadingUsage || searchState.loadingFiles) : false
+                    busy: searchState ? (searchState.loadingCatalog || searchState.loadingUsage || searchState.loadingFiles || searchState.loadingWallpapers || searchState.loadingClipboard || searchState.loadingClipboardPreview) : false
                     opacity: root.inputOpacity
                     onTextEdited: function(value) {
                         if (searchState)
@@ -341,9 +370,9 @@ PanelWindow {
                 height: root.contentShellHeight
                 radius: 26
                 opacity: root.contentShellOpacity
-                color: Qt.rgba(0, 0, 0, 0.98)
+                color: Theme.bgPopout
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.08)
+                border.color: Theme.borderSubtle
                 clip: true
                 z: 2
 
@@ -363,13 +392,15 @@ PanelWindow {
                         Rectangle {
                             anchors.fill: parent
                             radius: 22
-                            color: Qt.rgba(1, 1, 1, 0.025)
+                            color: Theme.bgSubtle
                         }
 
                         VicinaeResultsList {
                             id: results
                             anchors.fill: parent
                             anchors.margins: 6
+                            visible: root.clipboardTransitionProgress < 0.999 && root.wallpaperTransitionProgress < 0.999
+                            opacity: Math.max(0, Math.min(1, 1.0 - Math.max(root.clipboardTransitionProgress, root.wallpaperTransitionProgress) * 1.25))
                             model: searchState ? searchState.resultsModel : null
                             currentIndex: searchState ? searchState.selectedIndex : -1
                             onItemPressed: function(index) {
@@ -386,10 +417,61 @@ PanelWindow {
                             }
                         }
 
+                        VicinaeWallpaperGallery {
+                            id: wallpaperGallery
+                            anchors.fill: parent
+                            visible: root.wallpaperMode || root.wallpaperTransitionProgress > 0.001
+                            opacity: Math.max(0, Math.min(1, root.wallpaperTransitionProgress * 1.25))
+                            model: searchState ? searchState.resultsModel : null
+                            currentIndex: searchState ? searchState.selectedIndex : -1
+                            itemCount: searchState ? searchState.resultCount : 0
+                            onItemPressed: function(index) {
+                                if (searchState)
+                                    searchState.selectIndex(index)
+                            }
+                            onItemHovered: function(index) {
+                                if (searchState)
+                                    searchState.selectIndex(index)
+                            }
+                            onItemActivated: function(index) {
+                                if (searchState) {
+                                    searchState.selectIndex(index)
+                                    searchState.activateIndex(index)
+                                }
+                            }
+                        }
+
+                        VicinaeClipboardView {
+                            id: clipboardView
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            visible: root.clipboardMode || root.clipboardTransitionProgress > 0.001
+                            opacity: Math.max(0, Math.min(1, root.clipboardTransitionProgress * 1.25))
+                            transitionProgress: root.clipboardTransitionProgress
+                            model: searchState ? searchState.clipboardModel : null
+                            currentIndex: searchState ? searchState.selectedClipboardIndex : -1
+                            itemCount: searchState ? searchState.clipboardModel.count : 0
+                            selectedItem: searchState ? searchState.selectedClipboardItem : null
+                            onItemPressed: function(index) {
+                                if (searchState)
+                                    searchState.selectClipboardIndex(index)
+                            }
+                            onItemHovered: function(index) {
+                                if (searchState)
+                                    searchState.selectClipboardIndex(index)
+                            }
+                            onItemActivated: function(index) {
+                                if (searchState) {
+                                    searchState.selectClipboardIndex(index)
+                                    searchState.activateClipboardCurrent()
+                                }
+                            }
+                        }
+
                         ColumnLayout {
                             anchors.centerIn: parent
                             spacing: 8
-                            visible: searchState ? searchState.resultCount === 0 : false
+                            visible: searchState ? root.clipboardTransitionProgress < 0.001 && root.wallpaperTransitionProgress < 0.001 && searchState.resultCount === 0 : false
 
                             AppIcon {
                                 Layout.alignment: Qt.AlignHCenter
@@ -424,10 +506,24 @@ PanelWindow {
                         height: implicitHeight
                         statusText: searchState ? searchState.footerStatus : ""
                         primaryActionLabel: searchState ? searchState.primaryActionLabel : ""
+                        secondaryActionLabel: searchState ? searchState.secondaryActionLabel : ""
+                        secondaryActionShortcut: searchState ? searchState.secondaryActionShortcut : ""
                         escapeActionLabel: searchState ? searchState.escapeActionLabel : ""
                         onPrimaryTriggered: {
-                            if (searchState)
-                                searchState.activateCurrent()
+                            if (searchState) {
+                                if (root.clipboardMode)
+                                    searchState.activateClipboardCurrent()
+                                else
+                                    searchState.activateCurrent()
+                            }
+                        }
+                        onSecondaryTriggered: {
+                            if (searchState) {
+                                if (root.clipboardMode)
+                                    searchState.copyClipboardCurrent()
+                                else
+                                    searchState.toggleCurrentFavorite()
+                            }
                         }
                     }
                 }
@@ -438,6 +534,10 @@ PanelWindow {
         target: searchState
 
         function onSelectedIndexChanged() {
+            root.syncListPosition()
+        }
+
+        function onSelectedClipboardIndexChanged() {
             root.syncListPosition()
         }
 

@@ -238,6 +238,43 @@ Item {
         ]);
     }
 
+    function editReminder(reminder, targetDateKey, targetTime, title, listName) {
+        if (!reminder || root.reminderActionBusy || !targetDateKey)
+            return false;
+
+        let cleanTitle = title ? String(title).trim() : "";
+        let cleanListName = listName ? String(listName).trim() : "";
+        let cleanTime = targetTime ? String(targetTime).trim() : "";
+
+        if (cleanTitle.length === 0)
+            return false;
+
+        root.suppressReminder(reminder.signature, Date.now() + 120000);
+
+        let targetSignature = root.reminderSignature(targetDateKey, cleanTime, cleanTitle, cleanListName);
+        let targetDateTime = root.parseReminderDateTime(targetDateKey, cleanTime);
+        if (targetDateTime)
+            root.suppressReminder(targetSignature, targetDateTime.getTime());
+
+        root.runReminderCommand([
+            "python",
+            root.reminderActionScriptPath,
+            "edit",
+            root.filePath,
+            reminder.dateKey,
+            reminder.index.toString(),
+            reminder.title || "",
+            reminder.time || "",
+            reminder.list || "",
+            targetDateKey,
+            cleanTime,
+            cleanTitle,
+            cleanListName
+        ]);
+
+        return true;
+    }
+
     function snoozeReminder(reminder) {
         if (!reminder || root.reminderActionBusy)
             return;

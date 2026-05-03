@@ -61,6 +61,41 @@ def default_stats():
         "recent_sessions": []
     }
 
+def safe_int(value):
+    try:
+        return int(value)
+    except:
+        return 0
+
+def aggregate_recent_sessions(sessions):
+    daily_sessions = {}
+
+    for session in sessions:
+        if not isinstance(session, dict):
+            continue
+
+        date = str(session.get("date", ""))
+        if not date:
+            continue
+
+        if date not in daily_sessions:
+            daily_sessions[date] = {
+                "date": date,
+                "chars": 0,
+                "formulas": 0,
+                "sessions": 0,
+                "completed_at": ""
+            }
+
+        daily_sessions[date]["chars"] += safe_int(session.get("chars", 0))
+        daily_sessions[date]["formulas"] += safe_int(session.get("formulas", 0))
+        daily_sessions[date]["sessions"] += max(1, safe_int(session.get("sessions", 1)))
+
+        if session.get("completed_at"):
+            daily_sessions[date]["completed_at"] = session["completed_at"]
+
+    return list(daily_sessions.values())[-RECENT_SESSION_LIMIT:]
+
 def load_stats():
     os.makedirs(os.path.dirname(STATS_FILE), exist_ok=True)
 
@@ -78,6 +113,8 @@ def load_stats():
 
     if not isinstance(stats.get("recent_sessions"), list):
         stats["recent_sessions"] = []
+
+    stats["recent_sessions"] = aggregate_recent_sessions(stats["recent_sessions"])
 
     return stats
 
@@ -169,12 +206,13 @@ def update_stats(added_chars, added_formulas):
     stats["total_chars"] += added_chars
     stats["total_formulas"] += added_formulas
     stats["sessions_completed"] += 1
-    stats["recent_sessions"] = (stats["recent_sessions"] + [{
+    stats["recent_sessions"] = aggregate_recent_sessions(stats["recent_sessions"] + [{
         "date": today_str,
         "chars": added_chars,
         "formulas": added_formulas,
+        "sessions": 1,
         "completed_at": now.strftime("%H:%M")
-    }])[-RECENT_SESSION_LIMIT:]
+    }])
     
     save_stats(stats)
 

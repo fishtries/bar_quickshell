@@ -3,6 +3,8 @@ VicinaePopup VicinaePopup.qml
 VicinaeInput VicinaeInput.qml
 VicinaeResultsList VicinaeResultsList.qml
 VicinaeResultItem VicinaeResultItem.qml
+VicinaeClipboardView VicinaeClipboardView.qml
+VicinaeWallpaperGallery VicinaeWallpaperGallery.qml
 VicinaeCalculatorItem VicinaeCalculatorItem.qml
 VicinaeSectionHeader VicinaeSectionHeader.qml
 VicinaeFooter VicinaeFooter.qml

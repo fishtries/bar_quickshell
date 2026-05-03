@@ -6,7 +6,6 @@ singleton TimeState state/TimeState.qml
 singleton WindowState state/WindowState.qml
 singleton EventsState state/EventsState.qml
 singleton NotificationState state/NotificationState.qml
-singleton LocalSendState state/LocalSendState.qml
 singleton IslandState IslandState.qml
 singleton TodoState state/TodoState.qml
 singleton TrayState state/TrayState.qml

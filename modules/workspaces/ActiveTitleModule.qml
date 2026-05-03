@@ -68,7 +68,7 @@ Item {
                 id: nerdIcon
                 visible: root.hasIcon && root.displayedIconType === "nerd"
                 text: root.displayedIconValue
-                color: Theme.textDark
+                color: Theme.foregroundForItem(nerdIcon)
                 font {
                     pixelSize: 18
                     family: Theme.fontIcon
@@ -96,7 +96,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
 
                 text: root.displayedTitle
-                color: Theme.textDark
+                color: Theme.foregroundForItem(titleText)
                 font {
                     pixelSize: 13
                     weight: Font.DemiBold

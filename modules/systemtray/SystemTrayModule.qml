@@ -27,7 +27,7 @@ Row {
         width: 28
         height: 28
         radius: 8
-        color: TrayState.isExpanded ? Theme.bgActive : (toggleMouse.containsMouse ? Theme.bgHover : "transparent")
+        color: TrayState.isExpanded || toggleMouse.containsMouse ? Theme.localHoverForItem(trayToggle) : "transparent"
 
         Behavior on color {
             ColorAnimation {
@@ -38,7 +38,7 @@ Row {
         Text {
             anchors.centerIn: parent
             text: TrayState.isExpanded ? "▴" : "▾"
-            color: TrayState.isExpanded ? Theme.textPrimary : Theme.textSecondary
+            color: TrayState.isExpanded ? Theme.foregroundForItem(parent) : Theme.secondaryForegroundForItem(parent)
             font.family: Theme.fontPrimary
             font.pixelSize: 14
             opacity: toggleMouse.containsMouse || TrayState.isExpanded ? 1.0 : 0.85

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
+import "."
 import "../../core"
 import "../../components"
 
@@ -12,6 +13,8 @@ ColumnLayout {
     spacing: 10
 
     property bool scanning: LocalSendState.devices.length === 0 && scanSpinner.running
+    readonly property bool transferBusy: LocalSendState.currentTransfer.active === true
+    property string manualIp: "192.168.1.112"
 
     // Кнопка назад + заголовок + кнопка сканирования
     RowLayout {
@@ -46,6 +49,30 @@ ColumnLayout {
             color: "#ffffff"
             font { pixelSize: 16; bold: true }
             Layout.fillWidth: true
+        }
+
+        Rectangle {
+            implicitWidth: 28
+            implicitHeight: 28
+            radius: 14
+            color: receiveMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : (LocalSendState.receiverRunning ? Qt.rgba(0.35, 1, 0.55, 0.12) : "transparent")
+            Behavior on color { ColorAnimation { duration: 150 } }
+
+            Text {
+                anchors.centerIn: parent
+                text: "↓"
+                color: LocalSendState.receiverRunning ? "#67ff8d" : (receiveMouse.containsMouse ? "#ffffff" : "#aaaaaa")
+                font.pixelSize: 16
+                Behavior on color { ColorAnimation { duration: 150 } }
+            }
+
+            MouseArea {
+                id: receiveMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: LocalSendState.startReceiver()
+            }
         }
 
         Rectangle {
@@ -94,6 +121,74 @@ ColumnLayout {
         Layout.fillWidth: true
         height: 1
         color: Qt.rgba(1, 1, 1, 0.1)
+    }
+
+    Rectangle {
+        Layout.fillWidth: true
+        implicitHeight: manualRow.implicitHeight + 16
+        radius: 10
+        color: Qt.rgba(1, 1, 1, 0.03)
+
+        RowLayout {
+            id: manualRow
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 8
+
+            TextInput {
+                id: manualIpInput
+                Layout.fillWidth: true
+                text: root.manualIp
+                color: "#ffffff"
+                selectionColor: Qt.rgba(1, 1, 1, 0.2)
+                selectedTextColor: "#ffffff"
+                font.pixelSize: 12
+                clip: true
+                onTextChanged: root.manualIp = text
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: manualIpInput.text.length === 0
+                    text: "Manual IP"
+                    color: "#666666"
+                    font.pixelSize: 12
+                }
+            }
+
+            Rectangle {
+                implicitWidth: 62
+                implicitHeight: 26
+                radius: 13
+                color: manualSendMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
+                opacity: root.transferBusy || root.manualIp.trim().length === 0 ? 0.55 : 1.0
+                Behavior on color { ColorAnimation { duration: 150 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: root.transferBusy ? "Busy" : "Send"
+                    color: manualSendMouse.containsMouse ? "#ffffff" : "#aaaaaa"
+                    font.pixelSize: 11
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                }
+
+                MouseArea {
+                    id: manualSendMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: !root.transferBusy && root.manualIp.trim().length > 0
+                    onClicked: LocalSendState.pickAndSend({
+                        "name": root.manualIp.trim(),
+                        "alias": root.manualIp.trim(),
+                        "ip": root.manualIp.trim(),
+                        "port": 53317,
+                        "protocol": "auto",
+                        "version": "auto",
+                        "os": "manual"
+                    })
+                }
+            }
+        }
     }
 
     Connections {
@@ -175,7 +270,8 @@ ColumnLayout {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: LocalSendState.sendClipboard(deviceRect.deviceIp)
+                        enabled: !root.transferBusy
+                        onClicked: LocalSendState.pickAndSend(deviceRect.modelData)
                     }
 
                     RowLayout {
@@ -211,15 +307,16 @@ ColumnLayout {
                         }
 
                         Rectangle {
-                            implicitWidth: 60
+                            implicitWidth: 70
                             implicitHeight: 24
                             radius: 12
                             color: sendMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
+                            opacity: root.transferBusy ? 0.55 : 1.0
                             Behavior on color { ColorAnimation { duration: 150 } }
 
                             Text {
                                 anchors.centerIn: parent
-                                text: "Send"
+                                text: root.transferBusy ? "Busy" : "Files"
                                 color: sendMouse.containsMouse ? "#ffffff" : "#aaaaaa"
                                 font.pixelSize: 11
                                 Behavior on color { ColorAnimation { duration: 150 } }
@@ -230,7 +327,8 @@ ColumnLayout {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: LocalSendState.sendClipboard(deviceRect.deviceIp)
+                                enabled: !root.transferBusy
+                                onClicked: LocalSendState.pickAndSend(deviceRect.modelData)
                             }
                         }
                     }

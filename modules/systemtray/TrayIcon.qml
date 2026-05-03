@@ -31,7 +31,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 8
-        color: hoverArea.containsMouse ? Theme.bgHover : "transparent"
+        color: hoverArea.containsMouse ? Theme.localHoverForItem(root) : "transparent"
         opacity: hoverArea.containsMouse ? 1.0 : 0.0
 
         Behavior on color {

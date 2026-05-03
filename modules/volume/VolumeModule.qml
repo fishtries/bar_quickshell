@@ -54,7 +54,7 @@ Item {
                 height: slider.availableHeight
                 radius: 18
                 // Фон ползунка виден только при наведении
-                color: root.isHovered ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+                color: root.isHovered ? Theme.localHoverForItem(container) : "transparent"
                 Behavior on color { ColorAnimation { duration: 250 } }
                 
                 // Прогресс (заливка)
@@ -72,7 +72,7 @@ Item {
                     Rectangle {
                         width: sliderBg.width
                         height: parent.height
-                        color: root.isMuted ? Theme.error : Theme.textPrimary
+                        color: root.isMuted ? Theme.error : Theme.foregroundForItem(container)
                         radius: 18 // Округляем всё, но маска скроет правый конец
                         
                         Behavior on color { ColorAnimation { duration: 200 } }
@@ -92,7 +92,7 @@ Item {
                         font.pixelSize: 16
                         
                         readonly property bool isUnderFill: (1.0 - slider.visualPosition) < (anchors.rightMargin / parent.width) && root.isHovered
-                        color: isUnderFill ? "#333333" : (root.isMuted ? Theme.error : Theme.textPrimary)
+                        color: isUnderFill ? Theme.inverseForegroundForItem(container) : (root.isMuted ? Theme.error : Theme.foregroundForItem(container))
                         
                         Behavior on color { ColorAnimation { duration: 150 } }
                     }

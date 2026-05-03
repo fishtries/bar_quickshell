@@ -25,13 +25,13 @@ Item {
         width: 32
         height: 32
         radius: 10
-        color: btnMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+        color: btnMouse.containsMouse ? Theme.localHoverForItem(btnRect) : "transparent"
         Behavior on color { ColorAnimation { duration: 150 } }
         
         Text {
             anchors.centerIn: parent
             text: "" // Иконка Taskwarrior (Nerd Font)
-            color: root.popoutOpen ? Theme.info : Theme.textDark
+            color: root.popoutOpen ? Theme.info : Theme.foregroundForItem(parent)
             font.family: Theme.fontIcon
             font.pixelSize: 18
             Behavior on color { ColorAnimation { duration: 150 } }

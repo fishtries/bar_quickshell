@@ -15,9 +15,9 @@ Rectangle {
     signal keyPressed(int key, int modifiers, var event)
 
     radius: 22
-    color: Qt.rgba(0, 0, 0, 0.94)
+    color: Theme.bgElevated
     border.width: 1
-    border.color: input.activeFocus ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.08)
+    border.color: input.activeFocus ? Theme.borderStrong : Theme.borderSubtle
     implicitHeight: 60
 
     Behavior on border.color {
