@@ -11,12 +11,13 @@ Item {
 
     readonly property bool isReminder: root.sourceModule === "reminder"
     readonly property bool isLocalSend: root.sourceModule === "localsend"
+    readonly property bool isAside: root.sourceModule === "aside"
 
     signal reminderAutoActionRequested(var reminder)
 
     Timer {
         id: resetTimer
-        interval: root.isReminder ? 60000 : 5000
+        interval: root.isReminder ? 60000 : (root.isAside ? 20000 : 5000)
         onTriggered: {
             if (root.isReminder && root.reminderData) {
                 root.reminderAutoActionRequested(root.reminderData)
@@ -90,5 +91,14 @@ Item {
             root.isActive = true
             resetTimer.restart()
         }
+    }
+
+    function showAside() {
+        resetTimer.stop()
+        localSendFinishTimer.stop()
+        root.sourceModule = "aside"
+        root.reminderData = null
+        root.transferData = null
+        root.isActive = true
     }
 }

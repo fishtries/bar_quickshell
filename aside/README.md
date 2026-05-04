@@ -1,0 +1,206 @@
+# aside
+
+An LLM assistant for Wayland desktops that does what you ask and gets out of the way. Configurable to fit your look. Infinitely extensible with custom tools.
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/scottstav) [![Bitcoin](https://img.shields.io/badge/BTC-Donate-f7931a?logo=bitcoin&logoColor=white)](#donate) [![Monero](https://img.shields.io/badge/XMR-Donate-ff6600?logo=monero&logoColor=white)](#donate)
+
+- **overlay** — GTK4 layer-shell overlay. Streams tokens in real time with markdown rendering. Reply inline, view full conversation history, or open transcript. **Very** customizable.
+- **voice** — STT via faster-whisper, TTS via Piper (optional add-ons).
+- **input picker** — integrated conversation picker. Continue one or start fresh.
+
+
+Bind `aside query --mic` to a hotkey and start talking. Aside detects silence and automatically sends your query.
+
+## tools
+
+Where the magic happens
+
+aside ships with a memory tool built in. To add your own, just drop a Python file with a `TOOL_SPEC` + `run()` into a tool directory and the daemon picks it up automatically (requires restart). See `examples/tools/` for reference implementations.
+
+## any LLM
+
+[LiteLLM](https://github.com/BerriAI/litellm) under the hood — Claude, GPT, Gemini, Ollama, whatever. aside auto-detects which providers are available based on your API keys.
+
+## API keys
+
+keys are stored securely with a sane fallback chain:
+
+1. **environment variables** — checked first
+2. **GNOME Keyring** (via `secret-tool`) — if available
+3. **KWallet** (via `kwalletcli`) — if available
+4. **`~/.config/aside/env`** — plaintext fallback (mode 0600)
+
+```bash
+aside set-key anthropic sk-ant-...
+aside set-key openai sk-...
+```
+
+## CLI
+
+everything goes through the CLI, which makes it easy to script, integrate with pickers, or wire into status bars.
+
+```bash
+# models — auto-detects what's available based on your API keys
+aside models
+aside model set gemini/gemini-2.5-pro
+aside model exclude openai/o1   # LiteLLM may identify available models that have actually been deprecated or are not "chat" models in which case they will error. Exclude them so they dont show in `aside models` list
+
+# querying — rapid follow-ups auto-attach to the same conversation
+aside query "what time is it in tokyo"
+aside query --mic
+aside reply abc123 "tell me more"
+
+# overlay — open picker, view a conversation, reply inline
+aside input                     # open conversation picker
+aside view <id>                 # view conversation in overlay
+aside reply <id>                # open reply input for conversation
+
+# state
+aside status                    # JSON, great for status bars
+aside ls                        # recent conversations
+aside show <id>                 # print conversation
+aside open <id>                 # open as markdown
+
+# voice
+aside toggle-tts
+aside stop-tts
+aside cancel
+```
+
+a GUI for continuing conversations is provided if you don't want to script your own.
+
+## themes
+
+All visual styling lives in CSS theme files. aside ships with a default theme and loads user themes from `~/.config/aside/themes/<name>/style.css`. User themes layer on top of the default — override only what you want.
+
+```toml
+# config.toml
+[overlay]
+theme = "my-theme"
+```
+
+```css
+/* ~/.config/aside/themes/my-theme/style.css */
+@define-color bg #080810;
+@define-color fg #d0d0e0;
+@define-color border_color #282840;
+@define-color accent #d09040;
+@define-color user_accent #3a3a58;
+@define-color code_bg #1a1a2e;
+
+.overlay-container {
+    font: 12pt Iosevka;
+    border-radius: 8px;
+    border: 1px solid @border_color;
+}
+.accent-bar {
+    min-height: 4px;
+}
+```
+
+Available `@define-color` names: `bg`, `fg`, `border_color`, `accent`, `user_accent`, `code_bg`. See the [default theme](aside/overlay/themes/default/style.css) for all styleable classes.
+
+## configuration
+
+Behavior is configured via `~/.config/aside/config.toml`. Visual styling goes in themes (above), not config.
+
+```toml
+[model]
+name = "anthropic/claude-haiku-4-5"
+
+[overlay]
+theme = "default"
+position = "top-center"
+width = 450
+margin_top = 5
+
+[storage]
+archive_dir = "~/Dropbox/LLM/Chats"
+
+[tools]
+dirs = ["~/.config/aside/tools"]
+```
+
+Voice, TTS, model, plugins, and storage are all configurable — see [config reference](docs/configuration.md).
+
+## requirements
+
+- **Wayland compositor with layer-shell support** — Sway, Hyprland, KDE Plasma 6+, or any compositor implementing `zwlr_layer_shell_v1`. GNOME is **not** supported (the overlay won't render; the input popup will fall back to a regular window).
+- **PipeWire** — required for audio (TTS playback and STT mic capture).
+
+## install
+
+### arch linux (AUR)
+
+```bash
+yay -S aside
+aside set-key anthropic sk-ant-...
+systemctl --user enable --now aside-daemon aside-overlay
+```
+
+#### optional add-ons
+
+```bash
+# speech-to-text (faster-whisper, ~100MB model download)
+sudo aside enable-stt
+
+# text-to-speech (piper-tts, ~60MB voice model)
+sudo aside enable-tts
+```
+
+STT requires `pipewire` (provides `pw-record`) and `python-numpy` — both are already pulled in by the AUR package. TTS requires `portaudio` — also included.
+
+### manual
+
+Requires Python 3.11+, GTK4, and gtk4-layer-shell.
+
+```bash
+# system deps (Arch)
+pacman -S gtk4 gtk4-layer-shell python-gobject
+
+# system deps (Ubuntu/Debian — gtk4-layer-shell must be built from source)
+apt install python3-venv python3-dev libgtk-4-dev libadwaita-1-dev \
+    gobject-introspection libgirepository1.0-dev python3-gi python3-gi-cairo \
+    gir1.2-gtk-4.0 gir1.2-adw-1 meson ninja-build valac
+git clone https://github.com/wmww/gtk4-layer-shell.git /tmp/gtk4-layer-shell
+cd /tmp/gtk4-layer-shell && meson setup build && ninja -C build && sudo ninja -C build install && sudo ldconfig
+
+# install aside (use a tagged release for stability)
+git clone https://github.com/scottstav/aside.git
+cd aside
+git checkout $(git describe --tags --abbrev=0)
+make install
+aside set-key anthropic sk-ant-...
+systemctl --user enable --now aside-daemon aside-overlay
+```
+
+#### optional add-ons
+
+The enable commands pip-install the Python packages into aside's venv but rely on a few system libraries:
+
+| Add-on | Command | System deps |
+|--------|---------|-------------|
+| STT | `sudo aside enable-stt` | `pipewire-utils` (Fedora) · `pipewire` (Arch, Ubuntu) — for `pw-record` <br> `python3-numpy` (Fedora) · `python-numpy` (Arch) · `python3-numpy` (Ubuntu) |
+| TTS | `sudo aside enable-tts` | `portaudio` (Arch, Fedora) · `libportaudio2` (Ubuntu) |
+
+Install the system deps first, then run the enable command:
+
+```bash
+# example for Fedora:
+sudo dnf install -y pipewire-utils python3-numpy portaudio
+
+sudo aside enable-stt   # speech-to-text
+sudo aside enable-tts   # text-to-speech
+```
+
+## donate
+
+<a id="donate"></a>
+
+| | |
+|---|---|
+| Ko-fi | [ko-fi.com/scottstav](https://ko-fi.com/scottstav) |
+| BTC | `bc1q7xeyf4k0ud3akgch8svjwmdmeucr5mxx8lt4h6` |
+| XMR | `864dQBZ5LTDhcUFX2P5mxV4ubjxLNFvCa4p8xLGd9b3XAEbeXXGrUa6M78eftfUpQkFk81BHrSHeCGXoQCXMcRGRTu8cM4u` |
+
+MIT

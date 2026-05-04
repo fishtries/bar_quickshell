@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+
+# C overlay build
+overlay/build/
+
+# Meson build directory
+builddir/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+overlay/.cache/
+
+# makepkg / AUR build artifacts
+*.pkg.tar.zst
+*.tar.gz
+src/
+pkg/
+piper1-gpl/
+
+# ONNX models
+*.onnx
+*.onnx.json
+
+# Secrets
+.env
+
+# Planning docs
+docs/plans/
+
+# Misc
+*.log
+.worktrees

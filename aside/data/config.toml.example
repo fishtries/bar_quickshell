@@ -1,0 +1,77 @@
+# aside configuration
+#
+# Copy to: $XDG_CONFIG_HOME/aside/config.toml
+#          (usually ~/.config/aside/config.toml)
+#
+# Only uncomment the values you want to change — aside uses sensible
+# defaults for everything.
+
+# ---------------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------------
+# Uses LiteLLM format: provider/model-name
+# Examples: anthropic/claude-sonnet-4-6, openai/gpt-4o, ollama/llama3
+[model]
+# name = "anthropic/claude-sonnet-4-6"
+# timeout = 30                         # LLM request timeout in seconds
+
+# ---------------------------------------------------------------------------
+# Input
+# ---------------------------------------------------------------------------
+[input]
+# font = ""
+
+# ---------------------------------------------------------------------------
+# Voice (speech-to-text)
+# ---------------------------------------------------------------------------
+[voice]
+# enabled = false
+# stt_model = "base"
+# stt_device = "cpu"
+# smart_silence = true
+# silence_timeout = 2.5
+# no_speech_timeout = 3.0
+# force_send_phrases = ["send it", "that's it"]
+
+# ---------------------------------------------------------------------------
+# Text-to-Speech
+# ---------------------------------------------------------------------------
+[tts]
+# enabled = false
+# model = ""
+# speed = 1.0
+
+# ---------------------------------------------------------------------------
+# Overlay
+# ---------------------------------------------------------------------------
+[overlay]
+# theme = "default"                  # theme name from ~/.config/aside/themes/<name>/
+# width = 600
+# max_height = 500
+# position = "top-center"
+# margin_top = 10
+# margin_right = 0
+# margin_bottom = 0
+# margin_left = 0
+# scroll_duration = 200
+# fade_duration = 400
+# dismiss_timeout = 5.0
+
+# ---------------------------------------------------------------------------
+# Storage
+# ---------------------------------------------------------------------------
+[storage]
+# conversations_dir = ""             # JSON conversation state files
+# archive_dir = ""                   # exported markdown transcripts
+
+# ---------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------
+[tools]
+# dirs = []
+
+# ---------------------------------------------------------------------------
+# Status bar
+# ---------------------------------------------------------------------------
+[status]
+# signal = 12                        # SIGRTMIN+N sent to waybar on state changes

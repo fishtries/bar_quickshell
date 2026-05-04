@@ -1,0 +1,20 @@
+[
+  {
+    "calcQuestionUnit": "",
+    "launchKey": "quick:clipboard-history",
+    "calcAnswerUnit": "",
+    "aliasText": "clip",
+    "title": "Clipboard History",
+    "calcQuestion": "",
+    "iconName": "",
+    "iconText": "󰅌",
+    "launchValue": "",
+    "actionLabel": "Open History",
+    "accessoryColor": "#ff9f43",
+    "launchType": "clipboardHistory",
+    "accessoryText": "Open",
+    "subtitle": "Browse and paste previous clipboard entries",
+    "calcAnswer": "",
+    "kind": "result"
+  }
+]

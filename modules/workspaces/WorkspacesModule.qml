@@ -7,6 +7,7 @@ import QtQuick.Effects
 import "../../components"
 import "../../core"
 import "../localsend" as LocalSend
+import "../aside" as Aside
 
 Rectangle {
     id: root
@@ -15,6 +16,7 @@ Rectangle {
     readonly property bool isIsland: IslandState.isActive
     readonly property bool isReminderIsland: IslandState.isReminder
     readonly property bool isLocalSendIsland: IslandState.isLocalSend
+    readonly property bool isAsideIsland: IslandState.isAside
     readonly property var currentReminder: IslandState.reminderData
     readonly property var currentTransfer: IslandState.transferData
     readonly property bool isLocalSendConfirming: root.isLocalSendIsland && root.currentTransfer && root.currentTransfer.status === "confirming"
@@ -28,9 +30,11 @@ Rectangle {
     readonly property bool isCustomReminderValid: root.customReminderDate && !isNaN(root.customReminderDate.getTime()) && root.customReminderDate.getTime() > Date.now()
     readonly property int reminderIslandWidth: root.showCustomReminderPicker ? 920 : 980
     readonly property int reminderIslandHeight: root.showCustomReminderPicker ? 440 : 136
+    readonly property int asideIslandWidth: 760
+    readonly property int asideIslandHeight: Aside.AsideState.hasConversation ? 284 : (Aside.AsideState.inputRequested ? 146 : 96)
     
     color: isIsland ? "#000000" : Theme.localPanelForItem(root)
-    radius: isIsland ? (isReminderIsland ? 26 : 18) : Theme.radiusPanel
+    radius: isIsland ? (isReminderIsland ? 26 : (isAsideIsland ? 28 : 18)) : Theme.radiusPanel
     z: isIsland ? 100 : 0
     property bool interactionEnabled: true
     readonly property real launcherAnchorX: width
@@ -132,15 +136,15 @@ Rectangle {
         islandContentBlurPulse.restart()
     }
 
-    implicitWidth: isIsland ? (isReminderIsland ? reminderIslandWidth : (isLocalSendIsland ? (isLocalSendConfirming ? 680 : 560) : 600)) : (layout.implicitWidth + 12)
-    implicitHeight: isIsland ? (isReminderIsland ? reminderIslandHeight : 80) : (layout.implicitHeight + 14)
+    implicitWidth: isIsland ? (isReminderIsland ? reminderIslandWidth : (isAsideIsland ? asideIslandWidth : (isLocalSendIsland ? (isLocalSendConfirming ? 680 : 560) : 600))) : (layout.implicitWidth + 12)
+    implicitHeight: isIsland ? (isReminderIsland ? reminderIslandHeight : (isAsideIsland ? asideIslandHeight : 80)) : (layout.implicitHeight + 14)
 
     transform: Translate {
         id: workspaceShift
         y: {
             if (!root.isIsland) return 0;
             // Compensate for Row recentering: keep top edge fixed so expansion goes downward only
-            var targetH = root.isReminderIsland ? root.reminderIslandHeight : 80;
+            var targetH = root.isReminderIsland ? root.reminderIslandHeight : (root.isAsideIsland ? root.asideIslandHeight : 80);
             return targetH / 2 - 24;
         }
         Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
@@ -186,6 +190,31 @@ Rectangle {
         target: IslandState
         function onReminderAutoActionRequested(reminder) {
             root.resolveReminderAction("snooze", reminder)
+        }
+    }
+
+    Connections {
+        target: Aside.AsideState
+        function onInputRequestedChanged() {
+            if (Aside.AsideState.inputRequested)
+                asideInputFocusTimer.restart()
+        }
+    }
+
+    onIsAsideIslandChanged: {
+        if (root.isAsideIsland && Aside.AsideState.inputRequested)
+            asideInputFocusTimer.restart()
+    }
+
+    Timer {
+        id: asideInputFocusTimer
+        interval: 80
+        repeat: false
+        onTriggered: {
+            if (root.isAsideIsland && Aside.AsideState.inputRequested) {
+                asideInput.forceActiveFocus()
+                asideInput.cursorPosition = asideInput.text.length
+            }
         }
     }
 
@@ -995,8 +1024,278 @@ Rectangle {
             }
         }
 
+        ColumnLayout {
+            visible: root.isAsideIsland
+            opacity: root.islandContentOpacity
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                Rectangle {
+                    Layout.preferredWidth: 42
+                    Layout.preferredHeight: 42
+                    radius: 16
+                    color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.14)
+                    border.width: 1
+                    border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.35)
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        text: Aside.AsideState.phase === "listening" ? "󰍬" : "󰚩"
+                        font.pixelSize: 20
+                        color: Theme.info
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.preferredWidth: 190
+                    spacing: 2
+
+                    AppText {
+                        Layout.fillWidth: true
+                        text: "Aside"
+                        color: "#ffffff"
+                        font { pixelSize: 15; weight: Font.Bold }
+                        elide: Text.ElideRight
+                    }
+
+                    AppText {
+                        Layout.fillWidth: true
+                        text: Aside.AsideState.shortModelName + " · " + Aside.AsideState.statusText
+                        color: Aside.AsideState.errorMessage !== "" ? Theme.warning : "#aaaaaa"
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                    }
+                }
+
+                Aside.AsideParticleVisualizer {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 42
+                    level: Aside.AsideState.phase === "listening" ? Math.max(Aside.AsideState.audioLevel, 0.06) : (Aside.AsideState.isBusy ? 0.18 : 0.02)
+                    active: root.isAsideIsland && (Aside.AsideState.phase === "listening" || Aside.AsideState.isBusy)
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: 34
+                    Layout.preferredHeight: 34
+                    radius: 17
+                    color: asideNewMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
+                    border.width: 1
+                    border.color: Qt.rgba(1, 1, 1, asideNewMouse.containsMouse ? 0.20 : 0.10)
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        text: "\uf067"
+                        font.pixelSize: 13
+                        color: "#ffffff"
+                    }
+
+                    MouseArea {
+                        id: asideNewMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Aside.AsideState.newConversation()
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: 34
+                    Layout.preferredHeight: 34
+                    radius: 17
+                    color: asideMicMouse.containsMouse || Aside.AsideState.phase === "listening" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.22) : Qt.rgba(1, 1, 1, 0.08)
+                    border.width: 1
+                    border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, asideMicMouse.containsMouse || Aside.AsideState.phase === "listening" ? 0.40 : 0.16)
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        text: "󰍬"
+                        font.pixelSize: 14
+                        color: Aside.AsideState.phase === "listening" ? Theme.info : "#ffffff"
+                    }
+
+                    MouseArea {
+                        id: asideMicMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Aside.AsideState.startMic()
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: 34
+                    Layout.preferredHeight: 34
+                    radius: 17
+                    color: asideCloseMouse.containsMouse ? Qt.rgba(1, 0.3, 0.3, 0.18) : Qt.rgba(1, 1, 1, 0.08)
+                    border.width: 1
+                    border.color: asideCloseMouse.containsMouse ? Qt.rgba(1, 0.3, 0.3, 0.36) : Qt.rgba(1, 1, 1, 0.10)
+
+                    AppIcon {
+                        anchors.centerIn: parent
+                        text: Aside.AsideState.isBusy ? "󰓛" : "\uf00d"
+                        font.pixelSize: 13
+                        color: asideCloseMouse.containsMouse ? Theme.error : "#ffffff"
+                    }
+
+                    MouseArea {
+                        id: asideCloseMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (Aside.AsideState.isBusy)
+                                Aside.AsideState.cancel()
+                            else
+                                Aside.AsideState.closeIsland()
+                        }
+                    }
+                }
+            }
+
+            ColumnLayout {
+                visible: Aside.AsideState.hasConversation
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 8
+
+                Repeater {
+                    model: Aside.AsideState.messagesModel
+
+                    delegate: Rectangle {
+                        visible: index >= Math.max(0, Aside.AsideState.messagesModel.count - 2)
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(82, Math.max(50, asideMessageColumn.implicitHeight + 16))
+                        radius: 18
+                        color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.13) : Qt.rgba(1, 1, 1, 0.075)
+                        border.width: 1
+                        border.color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.30) : Qt.rgba(1, 1, 1, 0.10)
+
+                        ColumnLayout {
+                            id: asideMessageColumn
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 4
+
+                            AppText {
+                                Layout.fillWidth: true
+                                text: model.role === "user" ? "You" : "Aside"
+                                color: model.role === "user" ? Theme.info : "#ffffff"
+                                font { pixelSize: 11; weight: Font.Bold }
+                                elide: Text.ElideRight
+                            }
+
+                            TextEdit {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                text: model.text === "" && model.role === "assistant" && Aside.AsideState.isBusy ? "…" : model.text
+                                color: "#eeeeee"
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: 13
+                                wrapMode: TextEdit.Wrap
+                                readOnly: true
+                                selectByMouse: true
+                                clip: true
+                                selectedTextColor: "#000000"
+                                selectionColor: Theme.info
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                visible: Aside.AsideState.inputRequested
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? 42 : 0
+                radius: 21
+                color: asideInput.activeFocus ? Qt.rgba(1, 1, 1, 0.11) : Qt.rgba(1, 1, 1, 0.075)
+                border.width: 1
+                border.color: asideInput.activeFocus ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.48) : Qt.rgba(1, 1, 1, 0.12)
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 6
+                    spacing: 8
+
+                    TextInput {
+                        id: asideInput
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: "#ffffff"
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 14
+                        enabled: Aside.AsideState.daemonAvailable
+                        selectByMouse: true
+                        clip: true
+                        Keys.onEscapePressed: Aside.AsideState.closeIsland()
+                        Keys.onReturnPressed: {
+                            let value = asideInput.text.trim()
+                            if (value !== "") {
+                                asideInput.text = ""
+                                Aside.AsideState.sendQuery(value)
+                            }
+                        }
+                        Keys.onEnterPressed: {
+                            let value = asideInput.text.trim()
+                            if (value !== "") {
+                                asideInput.text = ""
+                                Aside.AsideState.sendQuery(value)
+                            }
+                        }
+
+                        AppText {
+                            anchors.fill: parent
+                            verticalAlignment: Text.AlignVCenter
+                            text: Aside.AsideState.daemonAvailable ? "Ask Aside…" : "aside daemon is offline"
+                            color: "#777777"
+                            font: asideInput.font
+                            enabled: false
+                            visible: !asideInput.text && !asideInput.preeditText
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        radius: 16
+                        color: asideSendMouse.containsMouse ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.30) : Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.16)
+                        opacity: asideInput.text.trim() !== "" && Aside.AsideState.daemonAvailable ? 1.0 : 0.45
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            text: "󰒊"
+                            font.pixelSize: 14
+                            color: Theme.info
+                        }
+
+                        MouseArea {
+                            id: asideSendMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: asideInput.text.trim() !== "" && Aside.AsideState.daemonAvailable
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                let value = asideInput.text.trim()
+                                if (value !== "") {
+                                    asideInput.text = ""
+                                    Aside.AsideState.sendQuery(value)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         RowLayout {
-            visible: !root.displayReminderIsland && root.isLocalSendIsland && !root.isLocalSendConfirming
+            visible: !root.displayReminderIsland && !root.isAsideIsland && root.isLocalSendIsland && !root.isLocalSendConfirming
             opacity: root.islandContentOpacity
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -1061,7 +1360,7 @@ Rectangle {
         }
 
         RowLayout {
-            visible: !root.displayReminderIsland && root.isLocalSendConfirming
+            visible: !root.displayReminderIsland && !root.isAsideIsland && root.isLocalSendConfirming
             opacity: root.islandContentOpacity
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -1146,7 +1445,7 @@ Rectangle {
         }
 
         RowLayout {
-            visible: !root.displayReminderIsland && !root.isLocalSendIsland
+            visible: !root.displayReminderIsland && !root.isAsideIsland && !root.isLocalSendIsland
             opacity: root.islandContentOpacity
             Layout.fillWidth: true
             Layout.fillHeight: true

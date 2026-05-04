@@ -18,6 +18,7 @@ import "modules/systemtray"
 import "modules/volume"
 import "components"
 import "modules/vicinae"
+import "modules/aside"
 
 PanelWindow {
     GlobalShortcut {
@@ -40,7 +41,7 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "qs-bar"
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: (clockModule.needsKeyboard || todoModule.needsKeyboard || ccModule.needsKeyboard) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: (clockModule.needsKeyboard || todoModule.needsKeyboard || ccModule.needsKeyboard || asideModule.needsKeyboard) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     visible: !Hyprland.focusedWindow || !Hyprland.focusedWindow.fullscreen
     
     // Маска кликабельности: собираем только те области, которые реально заняты интерфейсом
@@ -53,7 +54,7 @@ PanelWindow {
         Region { item: mathModule.popoutItem }
         Region { item: ccModule }
         Region { item: ccModule.popoutItem.maskItem }
-        Region { item: audioVis.popoutItem }
+        Region { item: audioVis.popoutMaskItem }
         Region { item: notifCards }
     }
     
@@ -126,7 +127,10 @@ PanelWindow {
                 triggerState: IslandState.isActive
                 slideOffsetX: -150
 
-                CavaVisualizer { id: audioVis }
+                CavaVisualizer {
+                    id: audioVis
+                    popoutParent: popupLayer
+                }
             }
         }
 
@@ -151,6 +155,11 @@ PanelWindow {
                 VolumeModule {
                     id: volModule
                 }
+            }
+
+            AsideModule {
+                id: asideModule
+                anchors.verticalCenter: parent.verticalCenter
             }
 
             // Control Center

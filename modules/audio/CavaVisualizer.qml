@@ -14,6 +14,12 @@ Item {
 
     property bool popoutOpen: false
     property Item popoutItem: mediaPopout
+    property Item popoutMaskItem: mediaPopout.maskItem
+    property Item popoutParent: null
+    readonly property Item effectivePopoutParent: popoutParent ? popoutParent : root
+    readonly property real effectiveWidth: root.width > 0 ? root.width : root.implicitWidth
+    readonly property real effectiveHeight: root.height > 0 ? root.height : root.implicitHeight
+    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, root.effectiveWidth / 2, root.effectiveHeight + 28)
     
     implicitWidth: currentWidth
     implicitHeight: 20
@@ -106,11 +112,12 @@ Item {
 
     MediaPopout {
         id: mediaPopout
+        parent: root.effectivePopoutParent
         isOpen: root.popoutOpen
         onCloseRequested: root.popoutOpen = false
 
-        anchors.top: parent.bottom
-        anchors.topMargin: 28
-        anchors.horizontalCenter: parent.horizontalCenter
+        x: root.popoutPosition.x - (width / 2)
+        y: root.popoutPosition.y
+        z: 1000
     }
 }
