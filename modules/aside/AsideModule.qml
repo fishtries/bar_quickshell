@@ -16,7 +16,10 @@ Item {
             return
         }
 
-        Aside.AsideState.requestTextInput()
+        if (IslandState.isAside)
+            Aside.AsideState.requestTextInput()
+        else
+            Aside.AsideState.newConversation()
         Aside.AsideState.refreshStatus()
     }
 

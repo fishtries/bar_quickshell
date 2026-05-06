@@ -24,6 +24,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "enabled": False,
         "stt_model": "base",
         "stt_device": "cpu",
+        "stt_language": "ru",
         "smart_silence": True,
         "silence_timeout": 2.5,
         "no_speech_timeout": 3.0,

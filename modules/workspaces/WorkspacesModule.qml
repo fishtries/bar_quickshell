@@ -31,7 +31,7 @@ Rectangle {
     readonly property int reminderIslandWidth: root.showCustomReminderPicker ? 920 : 980
     readonly property int reminderIslandHeight: root.showCustomReminderPicker ? 440 : 136
     readonly property int asideIslandWidth: 760
-    readonly property int asideIslandHeight: Aside.AsideState.hasConversation ? 284 : (Aside.AsideState.inputRequested ? 146 : 96)
+    readonly property int asideIslandHeight: Aside.AsideState.hasConversation ? (Aside.AsideState.inputRequested ? 430 : 382) : (Aside.AsideState.inputRequested ? 146 : 96)
     
     color: isIsland ? "#000000" : Theme.localPanelForItem(root)
     radius: isIsland ? (isReminderIsland ? 26 : (isAsideIsland ? 28 : 18)) : Theme.radiusPanel
@@ -1157,32 +1157,46 @@ Rectangle {
                 }
             }
 
-            ColumnLayout {
+            Flickable {
+                id: asideMessagesFlick
                 visible: Aside.AsideState.hasConversation
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 8
+                clip: true
+                contentWidth: width
+                contentHeight: asideMessageStack.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentHeight > height
+                onContentHeightChanged: contentY = Math.max(0, contentHeight - height)
+                onHeightChanged: contentY = Math.max(0, contentHeight - height)
 
-                Repeater {
-                    model: Aside.AsideState.messagesModel
+                Column {
+                    id: asideMessageStack
+                    width: asideMessagesFlick.width
+                    spacing: 8
 
-                    delegate: Rectangle {
-                        visible: index >= Math.max(0, Aside.AsideState.messagesModel.count - 2)
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.min(82, Math.max(50, asideMessageColumn.implicitHeight + 16))
-                        radius: 18
-                        color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.13) : Qt.rgba(1, 1, 1, 0.075)
-                        border.width: 1
-                        border.color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.30) : Qt.rgba(1, 1, 1, 0.10)
+                    Repeater {
+                        model: Aside.AsideState.messagesModel
 
-                        ColumnLayout {
-                            id: asideMessageColumn
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 4
+                        delegate: Rectangle {
+                            readonly property bool shouldDisplay: index >= Math.max(0, Aside.AsideState.messagesModel.count - 2)
+
+                            visible: shouldDisplay
+                            width: asideMessageStack.width
+                            height: shouldDisplay ? Math.max(50, asideRoleLabel.implicitHeight + asideMessageText.implicitHeight + 20) : 0
+                            radius: 18
+                            color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.13) : Qt.rgba(1, 1, 1, 0.075)
+                            border.width: 1
+                            border.color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.30) : Qt.rgba(1, 1, 1, 0.10)
 
                             AppText {
-                                Layout.fillWidth: true
+                                id: asideRoleLabel
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                anchors.topMargin: 8
                                 text: model.role === "user" ? "You" : "Aside"
                                 color: model.role === "user" ? Theme.info : "#ffffff"
                                 font { pixelSize: 11; weight: Font.Bold }
@@ -1190,8 +1204,13 @@ Rectangle {
                             }
 
                             TextEdit {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
+                                id: asideMessageText
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: asideRoleLabel.bottom
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                anchors.topMargin: 4
                                 text: model.text === "" && model.role === "assistant" && Aside.AsideState.isBusy ? "…" : model.text
                                 color: "#eeeeee"
                                 font.family: Theme.fontPrimary
@@ -1199,7 +1218,7 @@ Rectangle {
                                 wrapMode: TextEdit.Wrap
                                 readOnly: true
                                 selectByMouse: true
-                                clip: true
+                                clip: false
                                 selectedTextColor: "#000000"
                                 selectionColor: Theme.info
                             }
@@ -1231,7 +1250,7 @@ Rectangle {
                         color: "#ffffff"
                         font.family: Theme.fontPrimary
                         font.pixelSize: 14
-                        enabled: Aside.AsideState.daemonAvailable
+                        enabled: Aside.AsideState.daemonAvailable && !Aside.AsideState.isBusy
                         selectByMouse: true
                         clip: true
                         Keys.onEscapePressed: Aside.AsideState.closeIsland()
@@ -1266,7 +1285,7 @@ Rectangle {
                         Layout.preferredHeight: 32
                         radius: 16
                         color: asideSendMouse.containsMouse ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.30) : Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.16)
-                        opacity: asideInput.text.trim() !== "" && Aside.AsideState.daemonAvailable ? 1.0 : 0.45
+                        opacity: asideInput.text.trim() !== "" && Aside.AsideState.daemonAvailable && !Aside.AsideState.isBusy ? 1.0 : 0.45
 
                         AppIcon {
                             anchors.centerIn: parent
@@ -1279,7 +1298,7 @@ Rectangle {
                             id: asideSendMouse
                             anchors.fill: parent
                             hoverEnabled: true
-                            enabled: asideInput.text.trim() !== "" && Aside.AsideState.daemonAvailable
+                            enabled: asideInput.text.trim() !== "" && Aside.AsideState.daemonAvailable && !Aside.AsideState.isBusy
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 let value = asideInput.text.trim()

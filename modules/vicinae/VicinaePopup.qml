@@ -35,7 +35,7 @@ PanelWindow {
     readonly property real contentGap: 10
     readonly property real normalContentHeight: Math.max(280, Math.min(450, height - 180))
     readonly property real clipboardContentHeight: Math.max(430, Math.min(560, height - 160))
-    readonly property real wallpaperContentHeight: Math.max(360, Math.min(440, height - 160))
+    readonly property real wallpaperContentHeight: Math.max(420, Math.min(580, height - 120))
     readonly property real contentHeight: lerp(lerp(normalContentHeight, clipboardContentHeight, clipboardTransitionProgress), wallpaperContentHeight, wallpaperTransitionProgress)
     readonly property real launcherHeight: searchHeight + contentGap + contentHeight
     readonly property real finalSearchX: (width - searchWidth) * 0.5
@@ -67,6 +67,8 @@ PanelWindow {
     readonly property real contentShellOpacity: Math.max(0, Math.min(1, contentRevealProgress * 1.1))
     readonly property real contentShellY: finalContentY - (1.0 - contentRevealProgress) * 34
     readonly property real contentShellHeight: contentHeight * contentRevealProgress
+    readonly property real launcherModeTransitionProgress: Math.max(clipboardTransitionProgress, wallpaperTransitionProgress)
+    readonly property real launcherModeTransitionBlur: Math.sin(Math.max(0, Math.min(1, launcherModeTransitionProgress)) * Math.PI) * 0.45
     readonly property bool keyboardInteractive: visible && !closing && inputMorphProgress >= 0.5
 
     signal closeRequested()
@@ -343,6 +345,12 @@ PanelWindow {
                 border.color: Theme.borderSubtle
                 clip: true
                 z: 3
+                layer.enabled: root.launcherModeTransitionBlur > 0.001
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: AnimationConfig.blurMaxLight
+                    blur: root.launcherModeTransitionBlur
+                }
 
                 VicinaeInput {
                     id: input
@@ -375,6 +383,12 @@ PanelWindow {
                 border.color: Theme.borderSubtle
                 clip: true
                 z: 2
+                layer.enabled: root.launcherModeTransitionBlur > 0.001
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: AnimationConfig.blurMaxNormal
+                    blur: root.launcherModeTransitionBlur
+                }
 
                 Item {
                     anchors.fill: parent

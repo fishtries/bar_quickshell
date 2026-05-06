@@ -19,7 +19,20 @@ Item {
     readonly property Item effectivePopoutParent: popoutParent ? popoutParent : root
     readonly property real effectiveWidth: root.width > 0 ? root.width : root.implicitWidth
     readonly property real effectiveHeight: root.height > 0 ? root.height : root.implicitHeight
-    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, root.effectiveWidth / 2, root.effectiveHeight + 28)
+    property var popoutPosition: Qt.point(0, 0)
+
+    function updatePopoutPosition() {
+        const position = root.mapToItem(root.effectivePopoutParent, root.effectiveWidth / 2, root.effectiveHeight + 28)
+        root.popoutPosition = Qt.point(position.x, position.y)
+    }
+
+    onPopoutOpenChanged: {
+        if (popoutOpen)
+            updatePopoutPosition()
+    }
+
+    onEffectiveWidthChanged: updatePopoutPosition()
+    onEffectiveHeightChanged: updatePopoutPosition()
     
     implicitWidth: currentWidth
     implicitHeight: 20
@@ -120,4 +133,14 @@ Item {
         y: root.popoutPosition.y
         z: 1000
     }
+
+    Timer {
+        interval: 16
+        running: root.popoutOpen || mediaPopout.isPresented
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.updatePopoutPosition()
+    }
+
+    Component.onCompleted: updatePopoutPosition()
 }

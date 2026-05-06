@@ -28,6 +28,7 @@
 # enabled = false
 # stt_model = "base"
 # stt_device = "cpu"
+# stt_language = "ru"
 # smart_silence = true
 # silence_timeout = 2.5
 # no_speech_timeout = 3.0

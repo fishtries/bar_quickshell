@@ -68,10 +68,14 @@ def transcribe(audio: np.ndarray, whisper_config: dict) -> str:
     # faster-whisper expects float32 in [-1, 1].
     audio_float = audio.astype(np.float32) / 32768.0
 
+    language = whisper_config.get("language", "ru")
+    if language == "auto":
+        language = None
+
     segments, _ = model.transcribe(
         audio_float,
         beam_size=5,
-        language="en",
+        language=language,
         vad_filter=True,
     )
 

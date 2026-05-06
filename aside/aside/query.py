@@ -512,7 +512,7 @@ def send_query(
         # Overlay is already visible with user text + thinking dots.
         # Send stream_start (keeps user text, adds assistant message)
         # instead of open (which clears everything).
-        deferred_open = {"cmd": "stream_start"}
+        deferred_open = {"cmd": "stream_start", "conv_id": conv["id"]}
     else:
         _overlay_send(overlay_sock, open_cmd)
 

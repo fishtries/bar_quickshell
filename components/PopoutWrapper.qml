@@ -14,8 +14,14 @@ Item {
     property bool isSettled: false
     readonly property real contentHeight: contentColumn.implicitHeight + root.contentPadding * 2
     property real closeLiftY: 0
+    property real closeOriginX: originX
+    property real closePopoutWidth: popoutWidth
+    readonly property real activeOriginX: root.isOpen ? root.originX : root.closeOriginX
+    readonly property real activePopoutWidth: root.isOpen ? root.popoutWidth : root.closePopoutWidth
     readonly property bool isPresented: root.isOpen || popoutRect.width > 0 || popoutRect.height > 0
     function syncCloseGeometry() {
+        root.closeOriginX = root.originX;
+        root.closePopoutWidth = root.popoutWidth;
         let targetCenterY = Math.max(0, (root.contentHeight - root.bubbleDiameter) / 2);
         root.closeLiftY = targetCenterY / 3;
     }
@@ -24,13 +30,23 @@ Item {
         function onIsOpenChanged() {
             if (root.isOpen)
                 root.syncCloseGeometry();
-            else
+            else {
+                root.syncCloseGeometry();
                 root.isSettled = false;
+            }
         }
     }
     Connections {
         target: root
         function onContentHeightChanged() {
+            if (root.isOpen)
+                root.syncCloseGeometry();
+        }
+        function onPopoutWidthChanged() {
+            if (root.isOpen)
+                root.syncCloseGeometry();
+        }
+        function onOriginXChanged() {
             if (root.isOpen)
                 root.syncCloseGeometry();
         }
@@ -55,7 +71,7 @@ Item {
     default property alias content: contentLayout.data
 
     // Внешние размеры четко зафиксированы по ширине окна
-    implicitWidth: root.isPresented ? root.popoutWidth : 0
+    implicitWidth: root.isPresented ? root.activePopoutWidth : 0
     implicitHeight: root.isPresented ? (popoutRect.y + popoutRect.height) : 0
     width: implicitWidth
     height: implicitHeight
@@ -83,7 +99,7 @@ Item {
         radius: Theme.radiusPopout
         color: Theme.bgPopout
         // Вычисляются через анимацию x
-        x: root.originX
+        x: root.activeOriginX
         y: 0
 
         scale: root.bubbleScale
@@ -91,7 +107,7 @@ Item {
 
         // Целевая точка для перемещения кружка к центру будущего попапа
         property real targetCenterY: Math.max(0, (root.contentHeight - root.bubbleDiameter) / 2)
-        property real collapsedX: root.originX - root.bubbleRadius
+        property real collapsedX: root.activeOriginX - root.bubbleRadius
 
         states: State {
             name: "open"
@@ -153,7 +169,7 @@ Item {
                         ParallelAnimation {
                             NumberAnimation { target: popoutRect; property: "y"; to: 0; duration: AnimationConfig.durationTiny; easing.type: AnimationConfig.easingDefaultOut }
                             NumberAnimation { target: popoutRect; property: "width"; duration: AnimationConfig.durationStep; easing.type: AnimationConfig.easingDefaultIn }
-                            NumberAnimation { target: popoutRect; property: "x"; to: root.originX; duration: AnimationConfig.durationStep; easing.type: AnimationConfig.easingDefaultIn }
+                            NumberAnimation { target: popoutRect; property: "x"; to: root.activeOriginX; duration: AnimationConfig.durationStep; easing.type: AnimationConfig.easingDefaultIn }
                             NumberAnimation { target: popoutRect; property: "height"; duration: AnimationConfig.durationUltraFast; easing.type: AnimationConfig.easingDefaultIn }
                         }
                         NumberAnimation { target: popoutRect; property: "blurValue"; duration: AnimationConfig.durationUltraFast; easing.type: AnimationConfig.easingDefaultIn }

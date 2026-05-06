@@ -160,7 +160,7 @@ Item {
         else if (name === "replace")
             handleReplace(command.data || "")
         else if (name === "stream_start")
-            handleStreamStart()
+            handleStreamStart(command.conv_id || "")
         else if (name === "thinking")
             handleThinking()
         else if (name === "listening")
@@ -190,7 +190,6 @@ Item {
     function handleText(text) {
         showIsland(false)
         phase = "streaming"
-        inputRequested = false
         ensureAssistantMessage()
         let index = messagesModel.count - 1
         messagesModel.setProperty(index, "text", (messagesModel.get(index).text || "") + text)
@@ -234,10 +233,11 @@ Item {
         phase = "listening"
     }
 
-    function handleStreamStart() {
+    function handleStreamStart(convId) {
+        if (convId !== "")
+            conversationId = convId
         showIsland(false)
         phase = "streaming"
-        inputRequested = false
         ensureAssistantMessage()
     }
 
@@ -264,17 +264,22 @@ Item {
         let trimmed = (text || "").trim()
         if (trimmed === "")
             return
+        let startNew = forceNewConversation || conversationId === ""
         showIsland(false)
         errorMessage = ""
         phase = "thinking"
-        inputRequested = false
+        inputRequested = true
+        if (startNew) {
+            conversationId = ""
+            messagesModel.clear()
+        }
         appendMessage("user", trimmed)
         appendMessage("assistant", "")
         awaitingAssistant = true
         let command = ["python3", clientScriptPath, "query", trimmed]
-        if (forceNewConversation)
+        if (startNew)
             command.push("--new")
-        else if (conversationId !== "")
+        else
             command.push("--conversation-id", conversationId)
         forceNewConversation = false
         commandProcess.command = command
@@ -286,11 +291,8 @@ Item {
         errorMessage = ""
         phase = "listening"
         inputRequested = false
-        let command = ["python3", clientScriptPath, "mic"]
-        if (forceNewConversation)
-            command.push("--new")
-        else if (conversationId !== "")
-            command.push("--conversation-id", conversationId)
+        conversationId = ""
+        let command = ["python3", clientScriptPath, "mic", "--new"]
         forceNewConversation = false
         commandProcess.command = command
         commandProcess.running = true

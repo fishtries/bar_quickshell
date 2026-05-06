@@ -45,6 +45,7 @@ def capture_one_shot(config: dict, on_interim=None, on_audio_level=None,
     whisper_config = {
         "model": config.get("stt_model", "base"),
         "device": config.get("stt_device", "cpu"),
+        "language": config.get("stt_language", "ru"),
     }
 
     audio = AudioPipeline()
