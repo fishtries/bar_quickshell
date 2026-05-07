@@ -158,6 +158,27 @@ PanelWindow {
             openLauncher()
     }
 
+    function openClipboardHistory() {
+        if (searchState) {
+            if (searchState.wallpaperMode)
+                searchState.exitWallpaperPicker(false)
+
+            if (!searchState.clipboardMode)
+                searchState.enterClipboardHistory()
+        }
+
+        openLauncher()
+    }
+
+    function toggleClipboardHistory() {
+        if (visible && !closing && clipboardMode) {
+            closeLauncher()
+            return
+        }
+
+        openClipboardHistory()
+    }
+
     function beginClose() {
         if (!visible || closing)
             return

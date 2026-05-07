@@ -16,6 +16,7 @@ Item {
     property bool daemonAvailable: false
     property bool awaitingAssistant: false
     property bool forceNewConversation: false
+    property bool voiceSession: false
     property string phase: "idle"
     property string modelName: ""
     property string statusName: "idle"
@@ -44,6 +45,7 @@ Item {
 
     function requestTextInput() {
         errorMessage = ""
+        voiceSession = false
         showIsland(true)
     }
 
@@ -177,6 +179,7 @@ Item {
         if (convId !== "")
             conversationId = convId
         showIsland(false)
+        voiceSession = mode === "user"
         phase = mode === "user" ? "listening" : "streaming"
         errorMessage = ""
         if (awaitingAssistant) {
@@ -207,6 +210,7 @@ Item {
         awaitingAssistant = false
         phase = "idle"
         audioLevel = 0
+        voiceSession = false
         refreshStatus()
         scheduleIslandHide()
     }
@@ -215,6 +219,7 @@ Item {
         awaitingAssistant = false
         phase = "idle"
         audioLevel = 0
+        voiceSession = false
         messagesModel.clear()
         inputRequested = false
         popoutOpen = false
@@ -230,6 +235,8 @@ Item {
 
     function handleListening() {
         showIsland(false)
+        voiceSession = true
+        inputRequested = false
         phase = "listening"
     }
 
@@ -237,6 +244,7 @@ Item {
         if (convId !== "")
             conversationId = convId
         showIsland(false)
+        voiceSession = true
         phase = "streaming"
         ensureAssistantMessage()
     }
@@ -255,6 +263,7 @@ Item {
         conversationId = ""
         forceNewConversation = true
         awaitingAssistant = false
+        voiceSession = false
         phase = "idle"
         popoutOpen = true
         showIsland(true)
@@ -267,6 +276,7 @@ Item {
         let startNew = forceNewConversation || conversationId === ""
         showIsland(false)
         errorMessage = ""
+        voiceSession = false
         phase = "thinking"
         inputRequested = true
         if (startNew) {
@@ -289,6 +299,7 @@ Item {
     function startMic() {
         showIsland(false)
         errorMessage = ""
+        voiceSession = true
         phase = "listening"
         inputRequested = false
         conversationId = ""
@@ -318,6 +329,10 @@ Item {
 
     ListModel {
         id: messagesModel
+    }
+
+    Behavior on audioLevel {
+        NumberAnimation { duration: 110; easing.type: Easing.OutQuad }
     }
 
     Process {
@@ -390,5 +405,11 @@ Item {
     Component.onCompleted: {
         startBridge()
         refreshStatus()
+    }
+
+    Component.onDestruction: {
+        bridgeRestartTimer.stop()
+        if (bridgeProcess.running)
+            bridgeProcess.running = false
     }
 }

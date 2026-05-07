@@ -30,11 +30,19 @@ Rectangle {
     readonly property bool isCustomReminderValid: root.customReminderDate && !isNaN(root.customReminderDate.getTime()) && root.customReminderDate.getTime() > Date.now()
     readonly property int reminderIslandWidth: root.showCustomReminderPicker ? 920 : 980
     readonly property int reminderIslandHeight: root.showCustomReminderPicker ? 440 : 136
-    readonly property int asideIslandWidth: 760
-    readonly property int asideIslandHeight: Aside.AsideState.hasConversation ? (Aside.AsideState.inputRequested ? 430 : 382) : (Aside.AsideState.inputRequested ? 146 : 96)
+    readonly property bool asideVoiceIsland: root.isAsideIsland && Aside.AsideState.voiceSession
+    readonly property real asideVoiceLevel: Math.max(0, Math.min(1, Aside.AsideState.audioLevel))
+    readonly property real asideGlowEnergy: root.asideVoiceIsland ? Math.max(root.asideVoiceLevel, Aside.AsideState.phase === "listening" ? 0.08 : (Aside.AsideState.isBusy ? 0.14 : 0.04)) : 0
+    readonly property real asideVoiceTrackThickness: root.asideVoiceIsland ? 4 + root.asideGlowEnergy * 1.5 : 0
+    readonly property real asideVoiceTrailLength: root.asideVoiceIsland ? 0.18 + root.asideGlowEnergy * 0.05 : 0
+    readonly property int asideIslandWidth: root.asideVoiceIsland ? 840 : 760
+    readonly property int asideIslandHeight: root.asideVoiceIsland ? (Aside.AsideState.hasConversation ? (Aside.AsideState.phase === "listening" ? 184 : 402) : 132) : (Aside.AsideState.hasConversation ? (Aside.AsideState.inputRequested ? 430 : 382) : (Aside.AsideState.inputRequested ? 146 : 96))
+    property real asideGlowProgress: 0.0
     
     color: isIsland ? "#000000" : Theme.localPanelForItem(root)
     radius: isIsland ? (isReminderIsland ? 26 : (isAsideIsland ? 28 : 18)) : Theme.radiusPanel
+    border.width: root.asideVoiceIsland ? 2 : 0
+    border.color: root.asideVoiceIsland ? Qt.rgba(1, 1, 1, 0.88) : "transparent"
     z: isIsland ? 100 : 0
     property bool interactionEnabled: true
     readonly property real launcherAnchorX: width
@@ -464,6 +472,83 @@ Rectangle {
         return `${peer}${file}${bytes}`
     }
 
+    function asideBorderX(progress, margin) {
+        let w = Math.max(1, root.width - margin * 2)
+        let h = Math.max(1, root.height - margin * 2)
+        let d = ((progress % 1 + 1) % 1) * 2 * (w + h)
+        if (d < w)
+            return margin + d
+        if (d < w + h)
+            return root.width - margin
+        if (d < 2 * w + h)
+            return root.width - margin - (d - w - h)
+        return margin
+    }
+
+    function asideBorderY(progress, margin) {
+        let w = Math.max(1, root.width - margin * 2)
+        let h = Math.max(1, root.height - margin * 2)
+        let d = ((progress % 1 + 1) % 1) * 2 * (w + h)
+        if (d < w)
+            return margin
+        if (d < w + h)
+            return margin + (d - w)
+        if (d < 2 * w + h)
+            return root.height - margin
+        return root.height - margin - (d - 2 * w - h)
+    }
+
+    function asideBorderHorizontal(progress) {
+        let margin = 9
+        let w = Math.max(1, root.width - margin * 2)
+        let h = Math.max(1, root.height - margin * 2)
+        let d = ((progress % 1 + 1) % 1) * 2 * (w + h)
+        return d < w || (d >= w + h && d < 2 * w + h)
+    }
+
+    function asideRoundedBorderPoint(progress, margin) {
+        let r = Math.max(1, Math.min(root.radius, root.width / 2 - margin, root.height / 2 - margin))
+        let x0 = margin
+        let y0 = margin
+        let x1 = root.width - margin
+        let y1 = root.height - margin
+        let straightW = Math.max(1, x1 - x0 - 2 * r)
+        let straightH = Math.max(1, y1 - y0 - 2 * r)
+        let arc = Math.PI * r / 2
+        let total = 2 * (straightW + straightH) + 4 * arc
+        let d = ((progress % 1 + 1) % 1) * total
+
+        if (d < straightW)
+            return Qt.point(x0 + r + d, y0)
+        d -= straightW
+        if (d < arc) {
+            let a = -Math.PI / 2 + d / r
+            return Qt.point(x1 - r + Math.cos(a) * r, y0 + r + Math.sin(a) * r)
+        }
+        d -= arc
+        if (d < straightH)
+            return Qt.point(x1, y0 + r + d)
+        d -= straightH
+        if (d < arc) {
+            let a = d / r
+            return Qt.point(x1 - r + Math.cos(a) * r, y1 - r + Math.sin(a) * r)
+        }
+        d -= arc
+        if (d < straightW)
+            return Qt.point(x1 - r - d, y1)
+        d -= straightW
+        if (d < arc) {
+            let a = Math.PI / 2 + d / r
+            return Qt.point(x0 + r + Math.cos(a) * r, y1 - r + Math.sin(a) * r)
+        }
+        d -= arc
+        if (d < straightH)
+            return Qt.point(x0, y1 - r - d)
+        d -= straightH
+        let a = Math.PI + d / r
+        return Qt.point(x0 + r + Math.cos(a) * r, y0 + r + Math.sin(a) * r)
+    }
+
     function incomingConfirmationSubtitle() {
         let transfer = root.currentTransfer
         if (!transfer)
@@ -547,14 +632,90 @@ Rectangle {
         }
     }
 
+    Timer {
+        interval: 16
+        repeat: true
+        running: root.asideVoiceIsland
+        onTriggered: root.asideGlowProgress = (root.asideGlowProgress + 0.0028 + root.asideGlowEnergy * 0.018) % 1.0
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -2
+        visible: root.asideVoiceIsland
+        opacity: root.asideVoiceIsland ? 1 : 0
+        radius: root.radius + 2
+        color: "transparent"
+        border.width: 2
+        border.color: Qt.rgba(1, 1, 1, 0.36 + root.asideGlowEnergy * 0.20)
+        layer.enabled: visible
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(1, 1, 1, 0.36 + root.asideGlowEnergy * 0.28)
+            shadowBlur: 0.75
+            shadowScale: 1.04
+            shadowHorizontalOffset: 0
+            shadowVerticalOffset: 0
+        }
+        Behavior on opacity { NumberAnimation { duration: 160 } }
+        Behavior on border.color { ColorAnimation { duration: 120 } }
+    }
+
+    Canvas {
+        id: asideVoiceTrailCanvas
+        anchors.fill: parent
+        visible: root.asideVoiceIsland
+        opacity: root.asideVoiceIsland ? 1 : 0
+        onPaint: {
+            let ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            if (!root.asideVoiceIsland)
+                return
+
+            let steps = 140
+            let margin = 1
+            let start = root.asideGlowProgress
+            let end = root.asideGlowProgress + root.asideVoiceTrailLength
+            let startPoint = root.asideRoundedBorderPoint(start, margin)
+            let endPoint = root.asideRoundedBorderPoint(end, margin)
+            let gradient = ctx.createLinearGradient(startPoint.x, startPoint.y, endPoint.x, endPoint.y)
+            gradient.addColorStop(0.0, "rgba(255,255,255,0.00)")
+            gradient.addColorStop(0.55, "rgba(255,255,255,0.42)")
+            gradient.addColorStop(1.0, "rgba(255,255,255,0.98)")
+            ctx.lineCap = "round"
+            ctx.lineJoin = "round"
+            ctx.lineWidth = root.asideVoiceTrackThickness
+            ctx.strokeStyle = gradient
+
+            ctx.beginPath()
+            for (let i = 0; i <= steps; ++i) {
+                let point = root.asideRoundedBorderPoint(start + root.asideVoiceTrailLength * (i / steps), margin)
+                if (i === 0)
+                    ctx.moveTo(point.x, point.y)
+                else
+                    ctx.lineTo(point.x, point.y)
+            }
+            ctx.stroke()
+        }
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+        Connections {
+            target: root
+            function onAsideGlowProgressChanged() { asideVoiceTrailCanvas.requestPaint() }
+            function onAsideVoiceTrackThicknessChanged() { asideVoiceTrailCanvas.requestPaint() }
+            function onAsideVoiceTrailLengthChanged() { asideVoiceTrailCanvas.requestPaint() }
+        }
+        Behavior on opacity { NumberAnimation { duration: 160 } }
+    }
+
     // ─── Content 2: Island Overlay ──────────────────────────────────
     RowLayout {
         id: islandContent
         anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        anchors.topMargin: 16
-        anchors.bottomMargin: 16
+        anchors.leftMargin: root.asideVoiceIsland ? 24 : 16
+        anchors.rightMargin: root.asideVoiceIsland ? 24 : 16
+        anchors.topMargin: root.asideVoiceIsland ? 22 : 16
+        anchors.bottomMargin: root.asideVoiceIsland ? 22 : 16
         spacing: 12
         
         opacity: root.isIsland ? 1.0 : 0.0
@@ -1029,57 +1190,71 @@ Rectangle {
             opacity: root.islandContentOpacity
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 10
+            spacing: root.asideVoiceIsland ? 14 : 10
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.preferredHeight: root.asideVoiceIsland ? 48 : 42
                 spacing: 12
 
                 Rectangle {
-                    Layout.preferredWidth: 42
-                    Layout.preferredHeight: 42
-                    radius: 16
-                    color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.14)
+                    Layout.preferredWidth: root.asideVoiceIsland ? 48 : 42
+                    Layout.preferredHeight: root.asideVoiceIsland ? 48 : 42
+                    radius: root.asideVoiceIsland ? 20 : 16
+                    color: root.asideVoiceIsland ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.14)
                     border.width: 1
-                    border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.35)
+                    border.color: root.asideVoiceIsland ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.35)
 
                     AppIcon {
                         anchors.centerIn: parent
                         text: Aside.AsideState.phase === "listening" ? "󰍬" : "󰚩"
-                        font.pixelSize: 20
+                        font.pixelSize: root.asideVoiceIsland ? 22 : 20
                         color: Theme.info
+                    }
+
+                    layer.enabled: false
+                    layer.effect: MultiEffect {
+                        shadowEnabled: false
+                        shadowColor: "transparent"
+                        shadowBlur: 0
+                        shadowScale: 1
+                        shadowHorizontalOffset: 0
+                        shadowVerticalOffset: 0
                     }
                 }
 
                 ColumnLayout {
-                    Layout.preferredWidth: 190
+                    Layout.preferredWidth: root.asideVoiceIsland ? 260 : 190
+                    Layout.fillWidth: root.asideVoiceIsland
                     spacing: 2
 
                     AppText {
                         Layout.fillWidth: true
-                        text: "Aside"
+                        text: root.asideVoiceIsland ? (Aside.AsideState.phase === "listening" ? "Говори, я слушаю" : "Aside отвечает") : "Aside"
                         color: "#ffffff"
-                        font { pixelSize: 15; weight: Font.Bold }
+                        font { pixelSize: root.asideVoiceIsland ? 18 : 15; weight: Font.Bold }
                         elide: Text.ElideRight
                     }
 
                     AppText {
                         Layout.fillWidth: true
-                        text: Aside.AsideState.shortModelName + " · " + Aside.AsideState.statusText
+                        text: root.asideVoiceIsland ? (Aside.AsideState.phase === "listening" ? "Распознанный текст появится внутри" : "Ответ появится ниже и будет озвучен") : Aside.AsideState.shortModelName + " · " + Aside.AsideState.statusText
                         color: Aside.AsideState.errorMessage !== "" ? Theme.warning : "#aaaaaa"
-                        font.pixelSize: 11
+                        font.pixelSize: root.asideVoiceIsland ? 12 : 11
                         elide: Text.ElideRight
                     }
                 }
 
                 Aside.AsideParticleVisualizer {
+                    visible: !root.asideVoiceIsland
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 42
+                    Layout.preferredHeight: root.asideVoiceIsland ? 0 : 42
                     level: Aside.AsideState.phase === "listening" ? Math.max(Aside.AsideState.audioLevel, 0.06) : (Aside.AsideState.isBusy ? 0.18 : 0.02)
                     active: root.isAsideIsland && (Aside.AsideState.phase === "listening" || Aside.AsideState.isBusy)
                 }
 
                 Rectangle {
+                    visible: !root.asideVoiceIsland
                     Layout.preferredWidth: 34
                     Layout.preferredHeight: 34
                     radius: 17
@@ -1104,6 +1279,7 @@ Rectangle {
                 }
 
                 Rectangle {
+                    visible: !root.asideVoiceIsland
                     Layout.preferredWidth: 34
                     Layout.preferredHeight: 34
                     radius: 17
@@ -1169,37 +1345,55 @@ Rectangle {
                 interactive: contentHeight > height
                 onContentHeightChanged: contentY = Math.max(0, contentHeight - height)
                 onHeightChanged: contentY = Math.max(0, contentHeight - height)
+                Behavior on Layout.preferredHeight { NumberAnimation { duration: 260; easing.type: Easing.OutQuad } }
 
                 Column {
                     id: asideMessageStack
                     width: asideMessagesFlick.width
-                    spacing: 8
+                    spacing: root.asideVoiceIsland ? 12 : 8
 
                     Repeater {
                         model: Aside.AsideState.messagesModel
 
                         delegate: Rectangle {
                             readonly property bool shouldDisplay: index >= Math.max(0, Aside.AsideState.messagesModel.count - 2)
+                            readonly property bool voiceUser: root.asideVoiceIsland && model.role === "user"
+                            readonly property bool voiceAssistant: root.asideVoiceIsland && model.role === "assistant"
 
                             visible: shouldDisplay
-                            width: asideMessageStack.width
-                            height: shouldDisplay ? Math.max(50, asideRoleLabel.implicitHeight + asideMessageText.implicitHeight + 20) : 0
-                            radius: 18
-                            color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.13) : Qt.rgba(1, 1, 1, 0.075)
+                            width: voiceUser ? Math.min(asideMessageStack.width, 620) : asideMessageStack.width
+                            height: shouldDisplay ? Math.max(root.asideVoiceIsland ? 72 : 50, asideRoleLabel.implicitHeight + asideMessageText.implicitHeight + (root.asideVoiceIsland ? 30 : 20)) : 0
+                            x: voiceUser ? (asideMessageStack.width - width) / 2 : 0
+                            radius: root.asideVoiceIsland ? 24 : 18
+                            color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, root.asideVoiceIsland ? 0.18 : 0.13) : Qt.rgba(1, 1, 1, root.asideVoiceIsland ? 0.095 : 0.075)
                             border.width: 1
-                            border.color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.30) : Qt.rgba(1, 1, 1, 0.10)
+                            border.color: model.role === "user" ? Qt.rgba(0.35, 0.78, 1.0, root.asideVoiceIsland ? 0.42 : 0.30) : Qt.rgba(1, 1, 1, root.asideVoiceIsland ? 0.15 : 0.10)
+                            opacity: shouldDisplay ? 1 : 0
+                            scale: shouldDisplay ? 1 : 0.96
+                            layer.enabled: false
+                            layer.effect: MultiEffect {
+                                shadowEnabled: false
+                                shadowColor: "transparent"
+                                shadowBlur: 0
+                                shadowScale: 1
+                                shadowHorizontalOffset: 0
+                                shadowVerticalOffset: 0
+                            }
+                            Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutQuad } }
+                            Behavior on opacity { NumberAnimation { duration: 180 } }
+                            Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
 
                             AppText {
                                 id: asideRoleLabel
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.top: parent.top
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 10
-                                anchors.topMargin: 8
-                                text: model.role === "user" ? "You" : "Aside"
+                                anchors.leftMargin: root.asideVoiceIsland ? 16 : 10
+                                anchors.rightMargin: root.asideVoiceIsland ? 16 : 10
+                                anchors.topMargin: root.asideVoiceIsland ? 12 : 8
+                                text: model.role === "user" ? (root.asideVoiceIsland ? "Распознано" : "You") : (root.asideVoiceIsland ? "Ответ" : "Aside")
                                 color: model.role === "user" ? Theme.info : "#ffffff"
-                                font { pixelSize: 11; weight: Font.Bold }
+                                font { pixelSize: root.asideVoiceIsland ? 12 : 11; weight: Font.Bold }
                                 elide: Text.ElideRight
                             }
 
@@ -1208,13 +1402,13 @@ Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.top: asideRoleLabel.bottom
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 10
-                                anchors.topMargin: 4
-                                text: model.text === "" && model.role === "assistant" && Aside.AsideState.isBusy ? "…" : model.text
+                                anchors.leftMargin: root.asideVoiceIsland ? 16 : 10
+                                anchors.rightMargin: root.asideVoiceIsland ? 16 : 10
+                                anchors.topMargin: root.asideVoiceIsland ? 7 : 4
+                                text: model.text === "" && model.role === "assistant" && Aside.AsideState.isBusy ? "…" : (model.text === "" && model.role === "user" && Aside.AsideState.phase === "listening" ? "Слушаю…" : model.text)
                                 color: "#eeeeee"
                                 font.family: Theme.fontPrimary
-                                font.pixelSize: 13
+                                font.pixelSize: root.asideVoiceIsland ? (model.role === "user" ? 18 : 15) : 13
                                 wrapMode: TextEdit.Wrap
                                 readOnly: true
                                 selectByMouse: true

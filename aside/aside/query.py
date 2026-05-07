@@ -10,9 +10,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import socket
 import subprocess
 import threading
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -29,6 +31,15 @@ log = logging.getLogger("aside")
 # ---------------------------------------------------------------------------
 
 MAX_TOKENS = 4096
+MAX_TOOL_ROUNDS = 8
+MAX_TOOL_RESULT_CHARS = 20000
+FORCED_WEB_SEARCH_TOOL_ID = "forced_web_search"
+WEB_SEARCH_RE = re.compile(
+    r"(?:\b(?:search|find|google|web|internet|online|latest|current|today|news)\b|"
+    r"найди|найти|поищи|поиск|загугли|интернет|в интернете|сети|новост|"
+    r"свеж|актуальн|последн)",
+    re.IGNORECASE,
+)
 
 # Sentinel for explicit "start a new conversation"
 NEW_CONVERSATION = object()
@@ -186,20 +197,171 @@ def _parse_tool_calls(accumulated: dict[int, dict]) -> list[dict]:
     Each returned dict has ``id``, ``name``, and ``arguments`` (parsed JSON).
     """
     results: list[dict] = []
-    for _idx in sorted(accumulated):
-        entry = accumulated[_idx]
+    for idx in sorted(accumulated):
+        entry = accumulated[idx]
+        name = str(entry.get("name") or "").strip()
+        if not name:
+            log.warning("Skipping tool call without a function name at index %s", idx)
+            continue
         try:
             args = json.loads(entry["arguments"]) if entry["arguments"] else {}
         except json.JSONDecodeError:
             log.warning("Failed to parse tool arguments for %s: %s",
-                        entry["name"], entry["arguments"][:200])
+                        name, entry["arguments"][:200])
+            args = {}
+        if not isinstance(args, dict):
+            log.warning("Tool arguments for %s are not an object", name)
             args = {}
         results.append({
-            "id": entry["id"],
-            "name": entry["name"],
+            "id": str(entry.get("id") or f"call_{idx}"),
+            "name": name,
             "arguments": args,
         })
     return results
+
+
+def _format_tool_result(result: object, max_chars: int = MAX_TOOL_RESULT_CHARS) -> str:
+    if isinstance(result, dict) and result.get("type") == "image":
+        text = json.dumps({
+            "type": "image",
+            "media_type": result.get("media_type", "image/png"),
+            "base64": result.get("base64") or result.get("data") or "",
+        }, ensure_ascii=False, default=str)
+    elif isinstance(result, (dict, list)):
+        text = json.dumps(result, ensure_ascii=False, default=str)
+    else:
+        text = str(result)
+    if len(text) > max_chars:
+        return text[:max_chars] + f"\n\n[truncated to {max_chars} characters]"
+    return text
+
+
+def _tool_available(tools: list[dict] | None, name: str) -> bool:
+    for tool in tools or []:
+        function = tool.get("function", {})
+        if function.get("name") == name:
+            return True
+    return False
+
+
+def _should_force_web_search(text: str, tools: list[dict] | None, config: dict) -> bool:
+    if not config.get("tools", {}).get("force_web_search", True):
+        return False
+    if not _tool_available(tools, "web_search"):
+        return False
+    return bool(WEB_SEARCH_RE.search(text or ""))
+
+
+def _with_no_think(messages: list[dict], model: str, disable: bool) -> list[dict]:
+    if not disable or not model.startswith("ollama/"):
+        return messages
+    copied = [dict(message) for message in messages]
+    for message in reversed(copied):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            if "/no_think" not in content:
+                message["content"] = content.rstrip() + "\n\n/no_think"
+            return copied
+        if isinstance(content, list):
+            items = [dict(item) if isinstance(item, dict) else item for item in content]
+            for item in reversed(items):
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text = str(item.get("text") or "")
+                    if "/no_think" not in text:
+                        item["text"] = text.rstrip() + "\n\n/no_think"
+                    message["content"] = items
+                    return copied
+    return copied
+
+
+def _content_to_text(content: object) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(str(item.get("text") or ""))
+            elif isinstance(item, dict) and item.get("type") == "image_url":
+                parts.append("[image attached]")
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part)
+    return str(content)
+
+
+def _ollama_messages_to_text(messages: list[dict]) -> list[dict]:
+    converted: list[dict] = []
+    for message in messages:
+        role = str(message.get("role") or "user")
+        content = _content_to_text(message.get("content"))
+        tool_calls = message.get("tool_calls") or []
+        if tool_calls:
+            rendered_calls = []
+            for tool_call in tool_calls:
+                function = tool_call.get("function", {})
+                rendered_calls.append(
+                    f"{function.get('name', 'tool')}({function.get('arguments', '{}')})"
+                )
+            content = "\n".join(
+                part for part in [content, "Tool call: " + "; ".join(rendered_calls)] if part
+            )
+        if role == "tool":
+            content = "Tool result:\n" + content
+        converted.append({"role": role, "content": f"{role}: {content}" if content else f"{role}:"})
+    return converted
+
+
+def _prepare_messages_for_model(messages: list[dict], model: str, disable_thinking: bool) -> list[dict]:
+    prepared = _with_no_think(messages, model, disable_thinking)
+    if model.startswith("ollama/"):
+        converted = _ollama_messages_to_text(prepared)
+        if disable_thinking and converted and "/no_think" not in converted[-1]["content"]:
+            converted[-1]["content"] = converted[-1]["content"].rstrip() + "\n\n/no_think"
+        return converted
+    return prepared
+
+
+def _ollama_prompt(messages: list[dict]) -> str:
+    return "\n\n".join(_content_to_text(message.get("content")) for message in messages)
+
+
+def _ollama_generate_stream(
+    model: str,
+    messages: list[dict],
+    api_base: str | None,
+    timeout: int | float,
+    keep_alive: str,
+    think: bool | None = None,
+):
+    endpoint = (api_base or "http://localhost:11434").rstrip("/")
+    if endpoint.endswith("/api/generate"):
+        url = endpoint
+    else:
+        url = endpoint + "/api/generate"
+    model_name = model.split("/", 1)[1] if model.startswith("ollama/") else model
+    payload = {
+        "model": model_name,
+        "prompt": _ollama_prompt(messages),
+        "stream": True,
+        "keep_alive": keep_alive,
+        "options": {
+            "num_predict": MAX_TOKENS,
+        },
+    }
+    if think is not None:
+        payload["think"] = think
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    return urllib.request.urlopen(req, timeout=timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -222,14 +384,35 @@ def _connect_overlay() -> socket.socket | None:
 
 def _overlay_send(sock: socket.socket | None, msg: dict) -> None:
     """Send a JSON-line command to the overlay.  Swallows errors."""
+    payload = (json.dumps(msg) + "\n").encode("utf-8")
     if sock is None:
-        log.debug("overlay_send: no socket, dropping cmd=%s", msg.get("cmd"))
+        retry_sock = _connect_overlay()
+        if retry_sock is None:
+            log.debug("overlay_send: no socket, dropping cmd=%s", msg.get("cmd"))
+            return
+        try:
+            retry_sock.sendall(payload)
+            log.debug("overlay_send: cmd=%s", msg.get("cmd"))
+        except (BrokenPipeError, OSError) as e:
+            log.warning("overlay_send: retry failed cmd=%s: %s", msg.get("cmd"), e)
+        finally:
+            _overlay_close(retry_sock)
         return
     try:
-        sock.sendall((json.dumps(msg) + "\n").encode("utf-8"))
+        sock.sendall(payload)
         log.debug("overlay_send: cmd=%s", msg.get("cmd"))
     except (BrokenPipeError, OSError) as e:
         log.warning("overlay_send: error sending cmd=%s: %s", msg.get("cmd"), e)
+        retry_sock = _connect_overlay()
+        if retry_sock is None:
+            return
+        try:
+            retry_sock.sendall(payload)
+            log.debug("overlay_send: retry cmd=%s", msg.get("cmd"))
+        except (BrokenPipeError, OSError) as retry_error:
+            log.warning("overlay_send: retry failed cmd=%s: %s", msg.get("cmd"), retry_error)
+        finally:
+            _overlay_close(retry_sock)
 
 
 def _overlay_close(sock: socket.socket | None) -> None:
@@ -298,6 +481,10 @@ def stream_response(
     speak_on: bool,
     deferred_open: dict | None = None,
     timeout: int | float = 30,
+    api_base: str | None = None,
+    ollama_fast_path: bool = True,
+    ollama_keep_alive: str = "30m",
+    ollama_think: bool | None = None,
 ) -> tuple[str, list[dict], dict]:
     """Stream an LLM response via LiteLLM.
 
@@ -321,11 +508,70 @@ def stream_response(
     }
     if tools:
         api_kwargs["tools"] = tools
+    if api_base:
+        api_kwargs["api_base"] = api_base
 
     accumulated_text = ""
     accumulated_tool_calls: dict[int, dict] = {}
     usage = {"model": model, "input_tokens": 0, "output_tokens": 0}
     open_sent = deferred_open is None  # True if no deferred open needed
+
+    if ollama_fast_path and model.startswith("ollama/"):
+        response_stream = _ollama_generate_stream(
+            model=model,
+            messages=messages,
+            api_base=api_base,
+            timeout=timeout,
+            keep_alive=ollama_keep_alive,
+            think=ollama_think,
+        )
+        try:
+            for raw_line in response_stream:
+                if cancel_event and cancel_event.is_set():
+                    if hasattr(response_stream, "close"):
+                        response_stream.close()
+                    return accumulated_text, [], usage
+
+                line = raw_line.decode("utf-8").strip() if isinstance(raw_line, bytes) else str(raw_line).strip()
+                if not line:
+                    continue
+
+                data = json.loads(line)
+                if data.get("error"):
+                    raise RuntimeError(data["error"])
+
+                delta_content = data.get("response") or ""
+                if delta_content:
+                    if not open_sent and deferred_open:
+                        _overlay_send(overlay_sock, deferred_open)
+                        open_sent = True
+
+                    accumulated_text += delta_content
+                    if speak_on and tts is not None:
+                        for sentence in sentence_buf.add(delta_content):
+                            tts.speak(sentence)
+                    _overlay_send(overlay_sock, {
+                        "cmd": "text",
+                        "data": delta_content,
+                    })
+
+                if data.get("done"):
+                    usage["model"] = "ollama/" + (data.get("model") or model.split("/", 1)[1])
+                    usage["input_tokens"] = data.get("prompt_eval_count", 0) or 0
+                    usage["output_tokens"] = data.get("eval_count", 0) or 0
+                    break
+        finally:
+            if hasattr(response_stream, "close"):
+                response_stream.close()
+
+        if not open_sent and deferred_open:
+            _overlay_send(overlay_sock, deferred_open)
+
+        if speak_on and tts is not None:
+            for sentence in sentence_buf.flush():
+                tts.speak(sentence)
+
+        return accumulated_text, [], usage
 
     response_stream = litellm.completion(**api_kwargs)
 
@@ -338,44 +584,49 @@ def stream_response(
                 response_stream.close()
             return accumulated_text, [], usage
 
-        choice = chunk.choices[0] if chunk.choices else None
+        choices = _getval(chunk, "choices", [])
+        choice = choices[0] if choices else None
         if choice is None:
             # Usage-only final chunk (no choices).
-            if hasattr(chunk, "usage") and chunk.usage is not None:
-                usage["input_tokens"] = getattr(chunk.usage, "prompt_tokens", 0) or 0
-                usage["output_tokens"] = getattr(chunk.usage, "completion_tokens", 0) or 0
-                usage["model"] = getattr(chunk, "model", model) or model
+            usage_obj = _getval(chunk, "usage", None)
+            if usage_obj is not None:
+                usage["input_tokens"] = _getval(usage_obj, "prompt_tokens", 0) or 0
+                usage["output_tokens"] = _getval(usage_obj, "completion_tokens", 0) or 0
+                usage["model"] = _getval(chunk, "model", model) or model
             continue
 
-        delta = choice.delta
+        delta = _getval(choice, "delta", None)
+        delta_content = _getval(delta, "content", "") if delta else ""
+        delta_tool_calls = _getval(delta, "tool_calls", []) if delta else []
 
         # Send deferred open on first real content (text or tool call).
-        if not open_sent and delta and (delta.content or delta.tool_calls):
+        if not open_sent and delta and (delta_content or delta_tool_calls):
             _overlay_send(overlay_sock, deferred_open)
             open_sent = True
 
         # Text content.
-        if delta and delta.content:
-            accumulated_text += delta.content
+        if delta and delta_content:
+            accumulated_text += delta_content
 
             if speak_on and tts is not None:
-                for sentence in sentence_buf.add(delta.content):
+                for sentence in sentence_buf.add(delta_content):
                     tts.speak(sentence)
 
             _overlay_send(overlay_sock, {
                 "cmd": "text",
-                "data": delta.content,
+                "data": delta_content,
             })
 
         # Tool calls (streamed incrementally).
-        if delta and delta.tool_calls:
-            _accumulate_tool_calls(accumulated_tool_calls, delta.tool_calls)
+        if delta and delta_tool_calls:
+            _accumulate_tool_calls(accumulated_tool_calls, delta_tool_calls)
 
         # Usage from the last chunk (some providers put it on the final choice).
-        if hasattr(chunk, "usage") and chunk.usage is not None:
-            usage["input_tokens"] = getattr(chunk.usage, "prompt_tokens", 0) or 0
-            usage["output_tokens"] = getattr(chunk.usage, "completion_tokens", 0) or 0
-            usage["model"] = getattr(chunk, "model", model) or model
+        usage_obj = _getval(chunk, "usage", None)
+        if usage_obj is not None:
+            usage["input_tokens"] = _getval(usage_obj, "prompt_tokens", 0) or 0
+            usage["output_tokens"] = _getval(usage_obj, "completion_tokens", 0) or 0
+            usage["model"] = _getval(chunk, "model", model) or model
 
     # If stream ended without sending the deferred open, send it now.
     if not open_sent and deferred_open:
@@ -460,14 +711,20 @@ def send_query(
 
     model = config.get("model", {}).get("name", "anthropic/claude-sonnet-4-6")
     timeout = config.get("model", {}).get("timeout", 30)
+    api_base = config.get("model", {}).get("api_base")
+    if not api_base and model.startswith("ollama/"):
+        api_base = "http://localhost:11434"
     system_prompt = _build_system_prompt()
 
     # ------------------------------------------------------------------
     # TTS setup
     # ------------------------------------------------------------------
     speak_on = False
+    tts_config = config.get("tts", {})
     if tts is not None:
-        speak_on = status.speak_enabled
+        speak_on = status.speak_enabled or (
+            from_mic and bool(tts_config.get("mic_enabled", True))
+        )
     if speak_on and tts is not None:
         tts.start()
         status.set_status("speaking")
@@ -505,6 +762,10 @@ def send_query(
     # ------------------------------------------------------------------
     full_text = ""
     overlay_sock = _connect_overlay()
+    if speak_on and tts is not None and hasattr(tts, "set_audio_level_callback"):
+        def on_tts_audio_level(level):
+            _overlay_send(overlay_sock, {"cmd": "audio_level", "data": level})
+        tts.set_audio_level_callback(on_tts_audio_level)
     open_cmd = {"cmd": "open", "mode": "agent", "conv_id": conv["id"]}
     deferred_open: dict | None = None
 
@@ -519,8 +780,59 @@ def send_query(
     sentence_buf = SentenceBuffer()
     session_tokens = 0
     dirs = plugin_dirs or []
+    tool_rounds = 0
+    max_tool_rounds = int(config.get("tools", {}).get("max_rounds", MAX_TOOL_ROUNDS))
+    model_config = config.get("model", {})
+    disable_thinking = bool(model_config.get("disable_thinking", True))
+    ollama_fast_path = bool(model_config.get("ollama_fast_path", True))
+    ollama_keep_alive = str(model_config.get("ollama_keep_alive", "30m"))
+    ollama_think = False if disable_thinking else model_config.get("ollama_think")
 
     try:
+        if (
+            _should_force_web_search(text, tools, config)
+            and not (cancel_event and cancel_event.is_set())
+        ):
+            if deferred_open:
+                _overlay_send(overlay_sock, deferred_open)
+                deferred_open = None
+
+            search_args = {
+                "query": text,
+                "max_results": config.get("tools", {}).get("web_search_max_results", 5),
+            }
+            conv["messages"].append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": FORCED_WEB_SEARCH_TOOL_ID,
+                    "type": "function",
+                    "function": {
+                        "name": "web_search",
+                        "arguments": json.dumps(search_args),
+                    },
+                }],
+            })
+            store.write_transcript(conv)
+
+            log.info("Executing forced tool: web_search")
+            status.set_status("tool_use", tool_name="web_search")
+            result = run_tool("web_search", search_args, dirs)
+            conv["messages"].append({
+                "role": "tool",
+                "tool_call_id": FORCED_WEB_SEARCH_TOOL_ID,
+                "content": _format_tool_result(result),
+            })
+            store.write_transcript(conv)
+
+            full_text += "web_search\n\n"
+            _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
+            _overlay_send(overlay_sock, {"cmd": "thinking"})
+            if speak_on and tts is not None and tts._running:
+                status.set_status("speaking")
+            else:
+                status.set_status("thinking")
+
         while True:
             # Build the messages list fresh each iteration (system + history).
             messages = _build_messages(
@@ -531,6 +843,7 @@ def send_query(
             )
             # Remove the empty trailing user message that _build_messages appends.
             messages.pop()
+            messages = _prepare_messages_for_model(messages, model, disable_thinking)
 
             resp_text, tool_calls, usage = stream_response(
                 model=model,
@@ -543,6 +856,10 @@ def send_query(
                 speak_on=speak_on,
                 deferred_open=deferred_open,
                 timeout=timeout,
+                api_base=api_base,
+                ollama_fast_path=ollama_fast_path,
+                ollama_keep_alive=ollama_keep_alive,
+                ollama_think=ollama_think,
             )
             deferred_open = None  # Only defer on the first iteration
 
@@ -580,7 +897,22 @@ def send_query(
             if not tool_calls or (cancel_event and cancel_event.is_set()):
                 break
 
-            # Execute tools.
+            tool_rounds += 1
+            if tool_rounds > max_tool_rounds:
+                limit_msg = f"Stopped after {max_tool_rounds} tool-call rounds."
+                for tc in tool_calls:
+                    conv["messages"].append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": limit_msg,
+                    })
+                if full_text:
+                    full_text += "\n\n"
+                full_text += limit_msg
+                _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
+                store.write_transcript(conv)
+                break
+
             for tc in tool_calls:
                 if cancel_event and cancel_event.is_set():
                     break
@@ -588,26 +920,13 @@ def send_query(
                 status.set_status("tool_use", tool_name=tc["name"])
                 result = run_tool(tc["name"], tc["arguments"], dirs)
 
-                # Format tool result for conversation history.
-                if isinstance(result, dict) and result.get("type") == "image":
-                    mt = result.get("media_type", "image/png")
-                    result_content = [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{mt};base64,{result['base64']}",
-                            },
-                        },
-                        {"type": "text", "text": "Screenshot captured."},
-                    ]
-                else:
-                    result_content = str(result)
-
                 conv["messages"].append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
-                    "content": result_content,
+                    "content": _format_tool_result(result),
                 })
+
+            store.write_transcript(conv)
 
             # Update overlay with tool execution info.
             tool_names = " \u2192 ".join(tc["name"] for tc in tool_calls)
@@ -658,7 +977,7 @@ def send_query(
         # Raise so the daemon can retry with a fresh conversation.
         raise ContextWindowFull()
 
-    except litellm.BadRequestError as e:
+    except getattr(litellm, "BadRequestError", getattr(litellm, "InvalidRequestError", type("DummyError", (Exception,), {}))) as e:
         if "request_too_large" in str(e):
             log.warning("Request too large for conversation %s", conv["id"][:8])
             _overlay_send(overlay_sock, {"cmd": "clear"})
@@ -670,7 +989,7 @@ def send_query(
             raise ContextWindowFull()
         raise  # Re-raise other BadRequestErrors to be caught by APIError below
 
-    except litellm.exceptions.NotFoundError as e:
+    except getattr(litellm.exceptions, "NotFoundError", getattr(litellm, "NotFoundError", type("DummyError", (Exception,), {}))) as e:
         log.error("Model not found: %s — %s", model, e)
         _overlay_send(overlay_sock, {"cmd": "clear"})
         _overlay_close(overlay_sock)
@@ -679,7 +998,7 @@ def send_query(
             tts.stop()
         store.save(conv)
         return conv["id"]
-    except litellm.exceptions.AuthenticationError as e:
+    except getattr(litellm.exceptions, "AuthenticationError", getattr(litellm, "AuthenticationError", type("DummyError", (Exception,), {}))) as e:
         log.error("Authentication error: %s", e)
         _overlay_send(overlay_sock, {"cmd": "clear"})
         _overlay_close(overlay_sock)
@@ -688,7 +1007,7 @@ def send_query(
             tts.stop()
         store.save(conv)
         return conv["id"]
-    except litellm.exceptions.APIError as e:
+    except getattr(litellm.exceptions, "APIError", getattr(litellm, "APIError", type("DummyError", (Exception,), {}))) as e:
         log.error("API error: %s", e)
         _overlay_send(overlay_sock, {"cmd": "clear"})
         _overlay_close(overlay_sock)
@@ -708,4 +1027,6 @@ def send_query(
         store.save(conv)
         return conv["id"]
     finally:
+        if tts is not None and hasattr(tts, "set_audio_level_callback"):
+            tts.set_audio_level_callback(None)
         status.set_status("idle")

@@ -16,6 +16,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "model": {
         "name": "anthropic/claude-sonnet-4-6",
         "timeout": 30,
+        "disable_thinking": True,
+        "ollama_fast_path": True,
+        "ollama_keep_alive": "30m",
     },
     "input": {
         "font": "",
@@ -29,11 +32,22 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "silence_timeout": 2.5,
         "no_speech_timeout": 3.0,
         "force_send_phrases": ["send it", "that's it"],
+        "wake_enabled": False,
+        "wake_phrases": ["але дебил", "алле дебил", "алло дебил"],
+        "wake_max_capture_seconds": 5,
+        "wake_no_speech_timeout": 3.0,
+        "wake_silence_timeout": 1.2,
     },
     "tts": {
         "enabled": False,
+        "mic_enabled": True,
+        "backend": "piper",
         "model": "",
+        "voice": "vitaliy-ng",
         "speed": 1.0,
+        "rate": 100,
+        "pitch": 100,
+        "volume": 100,
     },
     "overlay": {
         "theme": "default",
@@ -55,6 +69,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "tools": {
         "dirs": [],
+        "max_rounds": 8,
+        "force_web_search": True,
     },
     "notifications": {},
     "status": {

@@ -14,7 +14,10 @@ from aside.query import (
     _accumulate_tool_calls,
     _build_messages,
     _build_system_prompt,
+    _format_tool_result,
+    _prepare_messages_for_model,
     _parse_tool_calls,
+    _should_force_web_search,
     notify_error,
     send_query,
     stream_response,
@@ -261,6 +264,87 @@ class TestParseToolCalls:
         result = _parse_tool_calls(acc)
         assert [r["name"] for r in result] == ["first", "second", "third"]
 
+    def test_generates_id_when_missing(self):
+        acc = {0: {"id": "", "name": "shell", "arguments": "{}"}}
+        result = _parse_tool_calls(acc)
+        assert result[0]["id"] == "call_0"
+
+    def test_skips_missing_name(self):
+        acc = {0: {"id": "c1", "name": "", "arguments": "{}"}}
+        result = _parse_tool_calls(acc)
+        assert result == []
+
+    def test_non_object_arguments_become_empty_object(self):
+        acc = {0: {"id": "c1", "name": "shell", "arguments": '["bad"]'}}
+        result = _parse_tool_calls(acc)
+        assert result[0]["arguments"] == {}
+
+
+class TestFormatToolResult:
+    def test_string_result(self):
+        assert _format_tool_result("ok") == "ok"
+
+    def test_json_result(self):
+        assert _format_tool_result({"ok": True}) == '{"ok": true}'
+
+    def test_image_result_uses_data_fallback(self):
+        result = _format_tool_result({
+            "type": "image",
+            "data": "abc",
+            "media_type": "image/png",
+        })
+        parsed = json.loads(result)
+        assert parsed["type"] == "image"
+        assert parsed["base64"] == "abc"
+
+    def test_truncates_long_result(self):
+        result = _format_tool_result("x" * 20, max_chars=5)
+        assert result.startswith("xxxxx")
+        assert "truncated" in result
+
+
+class TestWebSearchRouting:
+    def test_forces_web_search_for_explicit_search_request(self):
+        tools = [{"type": "function", "function": {"name": "web_search"}}]
+        assert _should_force_web_search("найди в интернете qwen новости", tools, {})
+
+    def test_does_not_force_without_tool(self):
+        assert not _should_force_web_search("найди в интернете qwen новости", [], {})
+
+    def test_can_disable_forced_web_search(self):
+        tools = [{"type": "function", "function": {"name": "web_search"}}]
+        assert not _should_force_web_search(
+            "latest qwen news",
+            tools,
+            {"tools": {"force_web_search": False}},
+        )
+
+
+class TestPrepareMessagesForModel:
+    def test_adds_no_think_for_ollama_only_in_prepared_messages(self):
+        messages = [{"role": "user", "content": "hello"}]
+        prepared = _prepare_messages_for_model(messages, "ollama/qwen-local", True)
+
+        assert "/no_think" in prepared[-1]["content"]
+        assert "/no_think" not in messages[-1]["content"]
+
+    def test_ollama_converts_tool_messages_to_text(self):
+        messages = [
+            {"role": "assistant", "content": None, "tool_calls": [{
+                "id": "forced_web_search",
+                "type": "function",
+                "function": {"name": "web_search", "arguments": "{}"},
+            }]},
+            {"role": "tool", "tool_call_id": "forced_web_search", "content": "Result"},
+            {"role": "user", "content": "answer"},
+        ]
+
+        prepared = _prepare_messages_for_model(messages, "ollama/qwen-local", True)
+
+        assert all(isinstance(message["content"], str) for message in prepared)
+        assert "Tool call: web_search({})" in prepared[0]["content"]
+        assert "Tool result:\nResult" in prepared[1]["content"]
+
 
 # ---------------------------------------------------------------------------
 # notify_error
@@ -329,6 +413,63 @@ def _make_usage_chunk(prompt_tokens, completion_tokens, model="test-model"):
 
 
 class TestStreamResponse:
+    @mock.patch("aside.query.litellm.completion")
+    @mock.patch("aside.query.urllib.request.urlopen")
+    def test_ollama_fast_path_streaming(self, mock_urlopen, mock_completion):
+        class FakeResponse:
+            def __init__(self, lines):
+                self.lines = lines
+                self.closed = False
+
+            def __iter__(self):
+                return iter(self.lines)
+
+            def close(self):
+                self.closed = True
+
+        response = FakeResponse([
+            b'{"model":"qwen-local","response":"Hi ","done":false}\n',
+            b'{"model":"qwen-local","response":"there","done":false}\n',
+            b'{"model":"qwen-local","done":true,"prompt_eval_count":7,"eval_count":2}\n',
+        ])
+        mock_urlopen.return_value = response
+
+        sent = []
+        mock_sock = mock.Mock()
+        mock_sock.sendall = lambda data: sent.append(json.loads(data.decode().strip()))
+
+        from aside.sentence_buffer import SentenceBuffer
+        text, tool_calls, usage = stream_response(
+            model="ollama/qwen-local",
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            cancel_event=None,
+            overlay_sock=mock_sock,
+            tts=None,
+            sentence_buf=SentenceBuffer(),
+            speak_on=False,
+            api_base="http://localhost:11434",
+            ollama_fast_path=True,
+            ollama_keep_alive="1h",
+            ollama_think=False,
+        )
+
+        assert text == "Hi there"
+        assert tool_calls == []
+        assert usage["model"] == "ollama/qwen-local"
+        assert usage["input_tokens"] == 7
+        assert usage["output_tokens"] == 2
+        assert [m["data"] for m in sent if m.get("cmd") == "text"] == ["Hi ", "there"]
+        assert response.closed
+        mock_completion.assert_not_called()
+
+        request = mock_urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        assert payload["model"] == "qwen-local"
+        assert payload["keep_alive"] == "1h"
+        assert payload["think"] is False
+        assert payload["stream"] is True
+
     @mock.patch("aside.query.litellm.completion")
     def test_basic_text_streaming(self, mock_completion):
         mock_completion.return_value = iter([
@@ -537,3 +678,211 @@ class TestSendQueryOverlay:
         open_cmds = [m for m in sent if m.get("cmd") == "open"]
         assert len(open_cmds) == 1
         assert open_cmds[0]["conv_id"] == "abc-123-def"
+
+    @mock.patch("aside.query.stream_response")
+    @mock.patch("aside.query._connect_overlay")
+    def test_mic_query_enables_tts_when_mic_tts_enabled(self, mock_connect, mock_stream):
+        mock_stream.return_value = (
+            "hi",
+            [],
+            {"model": "test-model", "input_tokens": 1, "output_tokens": 1},
+        )
+        mock_connect.return_value = None
+
+        store = mock.Mock()
+        conv = {"id": "mic-tts-conv", "messages": []}
+        store.get_or_create.return_value = conv
+
+        status = mock.Mock()
+        status.speak_enabled = False
+        usage_log = mock.Mock()
+        tts = mock.Mock()
+        tts._running = False
+
+        send_query(
+            text="hello",
+            conversation_id=NEW_CONVERSATION,
+            config={
+                "model": {"name": "test-model"},
+                "tts": {"mic_enabled": True},
+            },
+            store=store,
+            status=status,
+            usage_log=usage_log,
+            tts=tts,
+            from_mic=True,
+        )
+
+        tts.start.assert_called_once()
+        assert mock_stream.call_args.kwargs["speak_on"] is True
+
+
+class TestSendQueryToolCalling:
+    @mock.patch("aside.query.run_tool")
+    @mock.patch("aside.query.stream_response")
+    @mock.patch("aside.query._connect_overlay")
+    def test_executes_tool_and_continues_response(self, mock_connect, mock_stream, mock_run_tool, tmp_path):
+        mock_stream.side_effect = [
+            (
+                "",
+                [{
+                    "id": "call_1",
+                    "name": "memory",
+                    "arguments": {"action": "recent"},
+                }],
+                {"model": "test-model", "input_tokens": 10, "output_tokens": 1},
+            ),
+            (
+                "Tool result handled.",
+                [],
+                {"model": "test-model", "input_tokens": 20, "output_tokens": 5},
+            ),
+        ]
+        mock_run_tool.return_value = "Last memories: none"
+
+        sent = []
+        mock_sock = mock.Mock()
+        mock_sock.sendall = lambda data: sent.append(
+            json.loads(data.decode().strip())
+        )
+        mock_connect.return_value = mock_sock
+
+        store = mock.Mock()
+        conv = {"id": "tool-conv", "messages": []}
+        store.get_or_create.return_value = conv
+
+        status = mock.Mock()
+        status.speak_enabled = False
+        usage_log = mock.Mock()
+
+        result_id = send_query(
+            text="show memories",
+            conversation_id=NEW_CONVERSATION,
+            config={"model": {"name": "test-model"}, "tools": {"max_rounds": 3}},
+            store=store,
+            status=status,
+            usage_log=usage_log,
+            plugin_dirs=[tmp_path],
+            tools=[{"type": "function", "function": {"name": "memory"}}],
+        )
+
+        assert result_id == "tool-conv"
+        mock_run_tool.assert_called_once_with(
+            "memory",
+            {"action": "recent"},
+            [tmp_path],
+        )
+        assert mock_stream.call_count == 2
+
+        second_messages = mock_stream.call_args_list[1].kwargs["messages"]
+        assert second_messages[-1] == {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "Last memories: none",
+        }
+
+        assert conv["messages"][1]["role"] == "assistant"
+        assert conv["messages"][1]["tool_calls"][0]["function"]["name"] == "memory"
+        assert conv["messages"][2]["role"] == "tool"
+        assert conv["messages"][3] == {
+            "role": "assistant",
+            "content": "Tool result handled.",
+        }
+        assert any(m.get("cmd") == "thinking" for m in sent)
+
+    @mock.patch("aside.query.run_tool")
+    @mock.patch("aside.query.stream_response")
+    @mock.patch("aside.query._connect_overlay")
+    def test_tool_round_limit_adds_tool_results(self, mock_connect, mock_stream, mock_run_tool):
+        mock_stream.return_value = (
+            "",
+            [{
+                "id": "call_1",
+                "name": "memory",
+                "arguments": {"action": "recent"},
+            }],
+            {"model": "test-model", "input_tokens": 1, "output_tokens": 1},
+        )
+
+        sent = []
+        mock_sock = mock.Mock()
+        mock_sock.sendall = lambda data: sent.append(
+            json.loads(data.decode().strip())
+        )
+        mock_connect.return_value = mock_sock
+
+        store = mock.Mock()
+        conv = {"id": "limit-conv", "messages": []}
+        store.get_or_create.return_value = conv
+
+        status = mock.Mock()
+        status.speak_enabled = False
+        usage_log = mock.Mock()
+
+        send_query(
+            text="loop",
+            conversation_id=NEW_CONVERSATION,
+            config={"model": {"name": "test-model"}, "tools": {"max_rounds": 0}},
+            store=store,
+            status=status,
+            usage_log=usage_log,
+            tools=[{"type": "function", "function": {"name": "memory"}}],
+        )
+
+        mock_run_tool.assert_not_called()
+        assert conv["messages"][-1]["role"] == "tool"
+        assert "Stopped after 0 tool-call rounds." in conv["messages"][-1]["content"]
+        assert any(
+            m.get("cmd") == "replace" and "Stopped after 0 tool-call rounds." in m.get("data", "")
+            for m in sent
+        )
+
+    @mock.patch("aside.query.run_tool")
+    @mock.patch("aside.query.stream_response")
+    @mock.patch("aside.query._connect_overlay")
+    def test_forces_web_search_before_first_model_call(self, mock_connect, mock_stream, mock_run_tool, tmp_path):
+        mock_stream.return_value = (
+            "Final answer.",
+            [],
+            {"model": "ollama/qwen-local", "input_tokens": 1, "output_tokens": 1},
+        )
+        mock_run_tool.return_value = "Search result"
+
+        sent = []
+        mock_sock = mock.Mock()
+        mock_sock.sendall = lambda data: sent.append(
+            json.loads(data.decode().strip())
+        )
+        mock_connect.return_value = mock_sock
+
+        store = mock.Mock()
+        conv = {"id": "search-conv", "messages": []}
+        store.get_or_create.return_value = conv
+
+        status = mock.Mock()
+        status.speak_enabled = False
+        usage_log = mock.Mock()
+
+        send_query(
+            text="найди в интернете qwen новости",
+            conversation_id=NEW_CONVERSATION,
+            config={
+                "model": {"name": "ollama/qwen-local", "disable_thinking": True},
+                "tools": {"max_rounds": 3, "force_web_search": True},
+            },
+            store=store,
+            status=status,
+            usage_log=usage_log,
+            plugin_dirs=[tmp_path],
+            tools=[{"type": "function", "function": {"name": "web_search"}}],
+        )
+
+        mock_run_tool.assert_called_once_with(
+            "web_search",
+            {"query": "найди в интернете qwen новости", "max_results": 5},
+            [tmp_path],
+        )
+        first_model_messages = mock_stream.call_args.kwargs["messages"]
+        assert any("Tool result:\nSearch result" in m["content"] for m in first_model_messages)
+        assert "/no_think" in first_model_messages[-1]["content"]
+        assert all("/no_think" not in str(m.get("content")) for m in conv["messages"])

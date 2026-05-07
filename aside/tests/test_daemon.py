@@ -11,7 +11,7 @@ from unittest import mock
 import pytest
 
 from aside.config import DEFAULT_CONFIG
-from aside.daemon import Daemon
+from aside.daemon import Daemon, _extract_wake_command, _normalize_wake_text
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +76,54 @@ class TestDaemonConstruction:
                 with mock.patch("aside.daemon.TTSPipeline", side_effect=ImportError("no tts")):
                     d = Daemon(minimal_config)
         assert d.tts is None
+
+
+class TestWakePhrase:
+    def test_normalize_wake_text(self):
+        assert _normalize_wake_text("Алё, дебил!") == "але дебил"
+
+    def test_extract_wake_phrase_without_command(self):
+        assert _extract_wake_command(
+            "Алё, дебил!",
+            ["але дебил"],
+        ) == ""
+
+    def test_extract_command_after_wake_phrase(self):
+        assert _extract_wake_command(
+            "Алё, дебил, какая погода?",
+            ["але дебил"],
+        ) == "какая погода"
+
+    def test_extract_handles_alternate_phrase(self):
+        assert _extract_wake_command(
+            "алле дебил включи музыку",
+            ["але дебил", "алле дебил"],
+        ) == "включи музыку"
+
+    def test_extract_no_match(self):
+        assert _extract_wake_command(
+            "просто случайная речь",
+            ["але дебил"],
+        ) is None
+
+    def test_wake_capture_config_overrides_short_capture(self, minimal_config, tmp_path):
+        minimal_config["voice"].update({
+            "wake_max_capture_seconds": 4,
+            "wake_no_speech_timeout": 2,
+            "wake_silence_timeout": 1,
+            "smart_silence": True,
+            "force_send_phrases": ["send it"],
+        })
+        with mock.patch("aside.daemon.resolve_state_dir", return_value=tmp_path / "state"):
+            with mock.patch("aside.daemon.resolve_conversations_dir", return_value=tmp_path / "conversations"), mock.patch("aside.daemon.resolve_archive_dir", return_value=tmp_path / "archive"):
+                d = Daemon(minimal_config)
+
+        cfg = d._wake_capture_config()
+        assert cfg["max_capture_seconds"] == 4
+        assert cfg["no_speech_timeout"] == 2
+        assert cfg["silence_timeout"] == 1
+        assert cfg["smart_silence"] is False
+        assert cfg["force_send_phrases"] == []
 
 
 # ---------------------------------------------------------------------------

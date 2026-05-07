@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -104,6 +105,28 @@ except (ImportError, RuntimeError):
     capture_one_shot = None  # type: ignore[misc,assignment]
 
 
+_WAKE_WORD_RE = re.compile(r"[^0-9a-zа-я]+", re.IGNORECASE)
+
+
+def _normalize_wake_text(text: str) -> str:
+    text = text.lower().replace("ё", "е")
+    return _WAKE_WORD_RE.sub(" ", text).strip()
+
+
+def _extract_wake_command(text: str, phrases: list[str]) -> str | None:
+    normalized = _normalize_wake_text(text)
+    if not normalized:
+        return None
+    for phrase in phrases:
+        wake = _normalize_wake_text(phrase)
+        if not wake:
+            continue
+        match = re.search(rf"(?:^|\s){re.escape(wake)}(?:\s|$)", normalized)
+        if match:
+            return normalized[match.end():].strip()
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Daemon
 # ---------------------------------------------------------------------------
@@ -154,6 +177,11 @@ class Daemon:
             self.tts = TTSPipeline(
                 model=tts_cfg.get("model", ""),
                 speed=tts_cfg.get("speed", 1.0),
+                backend=tts_cfg.get("backend", "piper"),
+                voice=tts_cfg.get("voice", "vitaliy-ng"),
+                rate=tts_cfg.get("rate", 100),
+                pitch=tts_cfg.get("pitch", 100),
+                volume=tts_cfg.get("volume", 100),
             )
             log.info("TTS pipeline initialised")
         except ImportError:
@@ -170,6 +198,9 @@ class Daemon:
         self._cancel_lock = threading.Lock()
         # Mic capture cancel state (separate from query cancel)
         self._mic_cancel: threading.Event | None = None
+        self._voice_lock = threading.Lock()
+        self._wake_cancel = threading.Event()
+        self._wake_thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------
     # Tool loading (lazy)
@@ -294,6 +325,178 @@ class Daemon:
         if self.tts is not None:
             self.tts.stop()
 
+    def _wake_capture_config(self) -> dict:
+        cfg = dict(self.config.get("voice", {}))
+        cfg["max_capture_seconds"] = cfg.get("wake_max_capture_seconds", 5)
+        cfg["no_speech_timeout"] = cfg.get("wake_no_speech_timeout", 3.0)
+        cfg["silence_timeout"] = cfg.get("wake_silence_timeout", 1.2)
+        cfg["smart_silence"] = False
+        cfg["force_send_phrases"] = []
+        return cfg
+
+    def _start_wake_listener(self) -> None:
+        voice_cfg = self.config.get("voice", {})
+        if not voice_cfg.get("wake_enabled", False):
+            return
+        if capture_one_shot is None:
+            log.warning("Wake listener disabled: STT not installed")
+            return
+        if self._wake_thread is not None and self._wake_thread.is_alive():
+            return
+        self._wake_cancel.clear()
+        self._wake_thread = threading.Thread(target=self._wake_loop, daemon=True)
+        self._wake_thread.start()
+        log.info("Wake listener started")
+
+    def _wake_loop(self) -> None:
+        voice_cfg = self.config.get("voice", {})
+        phrases = [str(p) for p in voice_cfg.get("wake_phrases", [])]
+        cooldown = float(voice_cfg.get("wake_cooldown", 0.5))
+        while not self._wake_cancel.is_set():
+            with self._cancel_lock:
+                busy = self._cancel_event is not None or self._mic_cancel is not None
+            if busy:
+                time.sleep(0.25)
+                continue
+            if not self._voice_lock.acquire(timeout=0.25):
+                continue
+            try:
+                text = capture_one_shot(
+                    self._wake_capture_config(),
+                    cancel_event=self._wake_cancel,
+                )
+            except Exception:
+                log.exception("Wake capture error")
+                time.sleep(1)
+                continue
+            finally:
+                self._voice_lock.release()
+            command = _extract_wake_command(text or "", phrases)
+            if command is None:
+                continue
+            log.info("Wake phrase detected")
+            if command:
+                self._start_query_from_voice_text(command, NEW_CONVERSATION)
+            else:
+                self._capture_wake_command()
+            time.sleep(cooldown)
+
+    def _start_query_from_voice_text(self, text: str, conversation_id) -> None:
+        from aside.query import _connect_overlay, _overlay_send, _overlay_close
+
+        sock = None
+        try:
+            sock = _connect_overlay()
+            _overlay_send(sock, {
+                "cmd": "open",
+                "mode": "user",
+                "conv_id": "" if conversation_id is NEW_CONVERSATION else (conversation_id or ""),
+            })
+            _overlay_send(sock, {"cmd": "replace", "data": text})
+            _overlay_send(sock, {"cmd": "thinking"})
+        finally:
+            if sock is not None:
+                _overlay_close(sock)
+        self.start_query(text, conversation_id=conversation_id, from_mic=True)
+
+    def _capture_wake_command(self) -> None:
+        if capture_one_shot is None:
+            return
+        self.cancel_query()
+        cancel = threading.Event()
+        with self._cancel_lock:
+            self._mic_cancel = cancel
+        try:
+            self._run_voice_command_capture(NEW_CONVERSATION, cancel)
+        finally:
+            with self._cancel_lock:
+                if self._mic_cancel is cancel:
+                    self._mic_cancel = None
+
+    def _run_voice_command_capture(self, conv_id, cancel: threading.Event) -> None:
+        from aside.query import _connect_overlay, _overlay_send, _overlay_close
+
+        overlay_sock = None
+        try:
+            log.debug("mic: connecting to overlay socket")
+            overlay_sock = _connect_overlay()
+            log.debug("mic: overlay socket=%s", overlay_sock)
+            _overlay_send(overlay_sock, {
+                "cmd": "open",
+                "mode": "user",
+                "conv_id": "" if conv_id is NEW_CONVERSATION else (conv_id or ""),
+            })
+            log.debug("mic: sent open+listening to overlay")
+            _overlay_send(overlay_sock, {"cmd": "listening"})
+
+            def on_interim(text):
+                log.debug("mic: on_interim called: %r", text[:80] if text else "")
+                _overlay_send(overlay_sock, {
+                    "cmd": "replace",
+                    "data": text,
+                })
+
+            def on_audio_level(level):
+                _overlay_send(overlay_sock, {
+                    "cmd": "audio_level",
+                    "data": level,
+                })
+
+            def on_capture_end():
+                log.debug("mic: on_capture_end — sending thinking to overlay")
+                _overlay_send(overlay_sock, {"cmd": "thinking"})
+
+            log.debug("mic: calling capture_one_shot")
+            with self._voice_lock:
+                text = capture_one_shot(
+                    self.config.get("voice", {}),
+                    on_interim=on_interim,
+                    on_audio_level=on_audio_level,
+                    on_capture_end=on_capture_end,
+                    cancel_event=cancel,
+                )
+            log.debug("mic: capture_one_shot returned: %r", text[:80] if text else "")
+
+            if text:
+                log.debug("mic: showing final transcription, starting query")
+                _overlay_send(overlay_sock, {
+                    "cmd": "replace",
+                    "data": text,
+                })
+                _overlay_send(overlay_sock, {"cmd": "thinking"})
+                _overlay_close(overlay_sock)
+                overlay_sock = None
+                self.start_query(text, conversation_id=conv_id, from_mic=True)
+            else:
+                log.info("Mic capture returned empty, no query started")
+                _overlay_close(overlay_sock)
+                overlay_sock = None
+                clear_sock = _connect_overlay()
+                _overlay_send(clear_sock, {"cmd": "clear"})
+                _overlay_close(clear_sock)
+        except Exception as exc:
+            log.exception("Mic capture error")
+            try:
+                err_sock = _connect_overlay()
+                _overlay_send(err_sock, {
+                    "cmd": "open",
+                    "mode": "user",
+                })
+                _overlay_send(err_sock, {
+                    "cmd": "replace",
+                    "data": f"Mic error: {exc}",
+                })
+                time.sleep(2)
+                _overlay_close(err_sock)
+                clear_sock = _connect_overlay()
+                _overlay_send(clear_sock, {"cmd": "clear"})
+                _overlay_close(clear_sock)
+            except Exception:
+                log.debug("Failed to show mic error in overlay")
+        finally:
+            if overlay_sock is not None:
+                _overlay_close(overlay_sock)
+
     # ------------------------------------------------------------------
     # Socket handler
     # ------------------------------------------------------------------
@@ -341,84 +544,12 @@ class Daemon:
                     conv_id = self._resolve_conv(msg.get("conversation_id"))
 
                     def _mic_capture(cancel=mic_cancel):
-                        from aside.query import _connect_overlay, _overlay_send, _overlay_close
-
-                        overlay_sock = None
                         try:
-                            log.debug("mic: connecting to overlay socket")
-                            overlay_sock = _connect_overlay()
-                            log.debug("mic: overlay socket=%s", overlay_sock)
-                            _overlay_send(overlay_sock, {
-                                "cmd": "open",
-                                "mode": "user",
-                                "conv_id": "" if conv_id is NEW_CONVERSATION else (conv_id or ""),
-                            })
-                            log.debug("mic: sent open+listening to overlay")
-                            _overlay_send(overlay_sock, {"cmd": "listening"})
-
-                            def on_interim(text):
-                                log.debug("mic: on_interim called: %r", text[:80] if text else "")
-                                _overlay_send(overlay_sock, {
-                                    "cmd": "replace",
-                                    "data": text,
-                                })
-
-                            def on_audio_level(level):
-                                _overlay_send(overlay_sock, {
-                                    "cmd": "audio_level",
-                                    "data": level,
-                                })
-
-                            def on_capture_end():
-                                log.debug("mic: on_capture_end — sending thinking to overlay")
-                                _overlay_send(overlay_sock, {"cmd": "thinking"})
-
-                            log.debug("mic: calling capture_one_shot")
-                            text = capture_one_shot(
-                                self.config.get("voice", {}),
-                                on_interim=on_interim,
-                                on_audio_level=on_audio_level,
-                                on_capture_end=on_capture_end,
-                                cancel_event=cancel,
-                            )
-                            log.debug("mic: capture_one_shot returned: %r", text[:80] if text else "")
-
-                            if text:
-                                log.debug("mic: showing final transcription, starting query")
-                                # Show the final transcription, then re-start thinking dots
-                                # so user sees dots while waiting for LLM response.
-                                _overlay_send(overlay_sock, {
-                                    "cmd": "replace",
-                                    "data": text,
-                                })
-                                _overlay_send(overlay_sock, {"cmd": "thinking"})
-                                _overlay_close(overlay_sock)
-                                self.start_query(text, conversation_id=conv_id, from_mic=True)
-                            else:
-                                log.info("Mic capture returned empty, no query started")
-                                _overlay_close(overlay_sock)
-                                clear_sock = _connect_overlay()
-                                _overlay_send(clear_sock, {"cmd": "clear"})
-                                _overlay_close(clear_sock)
-                        except Exception as exc:
-                            log.exception("Mic capture error")
-                            try:
-                                err_sock = _connect_overlay()
-                                _overlay_send(err_sock, {
-                                    "cmd": "open",
-                                    "mode": "user",
-                                })
-                                _overlay_send(err_sock, {
-                                    "cmd": "replace",
-                                    "data": f"Mic error: {exc}",
-                                })
-                                time.sleep(2)
-                                _overlay_close(err_sock)
-                                clear_sock = _connect_overlay()
-                                _overlay_send(clear_sock, {"cmd": "clear"})
-                                _overlay_close(clear_sock)
-                            except Exception:
-                                log.debug("Failed to show mic error in overlay")
+                            self._run_voice_command_capture(conv_id, cancel)
+                        finally:
+                            with self._cancel_lock:
+                                if self._mic_cancel is cancel:
+                                    self._mic_cancel = None
 
                     threading.Thread(target=_mic_capture, daemon=True).start()
                     log.info("Socket: mic capture started (conv=%s)", conv_id or "auto")
@@ -508,9 +639,13 @@ class Daemon:
         # Ensure state directories exist
         state_dir = resolve_state_dir(self.config)
         state_dir.mkdir(parents=True, exist_ok=True)
+        self._start_wake_listener()
 
         # Run the socket server on the main thread (asyncio)
-        asyncio.run(self._run_socket_server())
+        try:
+            asyncio.run(self._run_socket_server())
+        finally:
+            self._wake_cancel.set()
 
     async def _run_socket_server(self) -> None:
         """Start the asyncio Unix socket server and serve forever."""

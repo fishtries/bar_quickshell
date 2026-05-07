@@ -5,9 +5,14 @@ playback (audio -> speakers). Supports interruption and lazy model loading.
 """
 
 import logging
+import math
 import queue
+import shutil
+import subprocess
+import tempfile
 import threading
 import time
+import wave
 
 log = logging.getLogger("aside")
 
@@ -22,10 +27,28 @@ class TTSPipeline:
     # Default voice: piper-voices-en-us package installs here
     _DEFAULT_MODEL = "/usr/share/piper-voices/en/en_US/lessac/medium/en_US-lessac-medium.onnx"
 
-    def __init__(self, model="", speed=1.0):
+    def __init__(
+        self,
+        model="",
+        speed=1.0,
+        backend="piper",
+        voice="",
+        rate=100,
+        pitch=100,
+        volume=100,
+        on_audio_level=None,
+    ):
+        self._backend = (backend or "piper").lower()
         self._model_path = model or self._DEFAULT_MODEL
         self._speed = speed
+        self._voice_name = voice or "vitaliy-ng"
+        self._rate = int(rate)
+        self._pitch = int(pitch)
+        self._volume = int(volume)
         self._voice = None  # Lazy-loaded PiperVoice
+        self._rhvoice_cmd = ""
+        self._rhvoice_ready = False
+        self._on_audio_level = on_audio_level
         self._sample_rate = 22050  # Updated when voice loads
         self._sentence_q: queue.Queue = queue.Queue()
         self._audio_q: queue.Queue = queue.Queue()
@@ -36,6 +59,18 @@ class TTSPipeline:
 
     def _ensure_loaded(self):
         """Lazy-load the Piper voice model on first use."""
+        if self._backend == "rhvoice":
+            if self._rhvoice_ready:
+                return
+            cmd = shutil.which("RHVoice-test")
+            if not cmd:
+                raise ImportError("RHVoice-test not installed")
+            self._rhvoice_cmd = cmd
+            self._sample_rate = 24000
+            self._rhvoice_ready = True
+            log.info("RHVoice TTS selected (voice=%s)", self._voice_name)
+            return
+
         if self._voice is not None:
             return
         if not self._model_path:
@@ -50,12 +85,37 @@ class TTSPipeline:
             log.exception("Failed to load Piper TTS")
             raise
 
-    def update_config(self, model: str, speed: float):
+    def update_config(
+        self,
+        model: str,
+        speed: float,
+        backend: str | None = None,
+        voice: str | None = None,
+        rate: int | None = None,
+        pitch: int | None = None,
+        volume: int | None = None,
+    ):
         """Update voice settings. Takes effect on next sentence."""
+        new_backend = (backend or self._backend or "piper").lower()
+        if new_backend != self._backend:
+            self._backend = new_backend
+            self._voice = None
+            self._rhvoice_ready = False
         if model != self._model_path:
             self._model_path = model
             self._voice = None  # Force reload for new model
         self._speed = speed
+        if voice is not None:
+            self._voice_name = voice
+        if rate is not None:
+            self._rate = int(rate)
+        if pitch is not None:
+            self._pitch = int(pitch)
+        if volume is not None:
+            self._volume = int(volume)
+
+    def set_audio_level_callback(self, callback):
+        self._on_audio_level = callback
 
     def start(self):
         """Start the synthesis and playback threads."""
@@ -129,6 +189,10 @@ class TTSPipeline:
             self._audio_q.put(_STOP)
             return
 
+        if self._backend == "rhvoice":
+            self._rhvoice_synth_loop()
+            return
+
         from piper import SynthesisConfig
 
         # Piper speed: length_scale < 1 = faster, > 1 = slower
@@ -152,6 +216,87 @@ class TTSPipeline:
             except Exception:
                 log.exception("TTS synthesis error for: %s", item[:50])
 
+    def _rhvoice_synth_loop(self):
+        while True:
+            item = self._sentence_q.get()
+            if item is _STOP:
+                self._audio_q.put(_STOP)
+                break
+            if item is _DONE:
+                self._audio_q.put(_DONE)
+                break
+            try:
+                self._audio_q.put(self._synthesize_rhvoice(item))
+            except Exception:
+                log.exception("RHVoice synthesis error for: %s", item[:50])
+
+    def _synthesize_rhvoice(self, text: str):
+        import numpy as np
+
+        rate = self._clamp_percent(round(self._rate * self._speed))
+        pitch = self._clamp_percent(self._pitch)
+        volume = self._clamp_percent(self._volume)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as out:
+            out_path = out.name
+        try:
+            cmd = [
+                self._rhvoice_cmd or "RHVoice-test",
+                "-p",
+                self._voice_name,
+                "-o",
+                out_path,
+                "-R",
+                str(self._sample_rate),
+                "-r",
+                str(rate),
+                "-t",
+                str(pitch),
+                "-v",
+                str(volume),
+            ]
+            proc = subprocess.run(
+                cmd,
+                input=text,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            if proc.returncode != 0:
+                raise RuntimeError(proc.stderr.strip() or "RHVoice-test failed")
+            return self._read_audio_file(out_path)
+        finally:
+            try:
+                import os
+                os.unlink(out_path)
+            except OSError:
+                pass
+
+    def _read_audio_file(self, path: str):
+        import numpy as np
+
+        try:
+            with wave.open(path, "rb") as wav:
+                sample_rate = wav.getframerate()
+                channels = wav.getnchannels()
+                width = wav.getsampwidth()
+                frames = wav.readframes(wav.getnframes())
+        except wave.Error:
+            data = np.fromfile(path, dtype=np.int16)
+            return data.astype(np.float32) / 32768.0
+
+        if width != 2:
+            raise ValueError(f"Unsupported RHVoice sample width: {width}")
+        audio = np.frombuffer(frames, dtype=np.int16)
+        if channels > 1:
+            audio = audio.reshape(-1, channels).mean(axis=1).astype(np.int16)
+        self._sample_rate = sample_rate
+        return audio.astype(np.float32) / 32768.0
+
+    @staticmethod
+    def _clamp_percent(value: int) -> int:
+        return max(20, min(300, int(value)))
+
     def _play_loop(self):
         """Thread: pull audio arrays, play through speakers."""
         import sounddevice as sd
@@ -171,17 +316,43 @@ class TTSPipeline:
             if not self._running:
                 break
             try:
+                level = self._audio_level(item)
+                self._emit_audio_level(level)
                 sd.play(item, samplerate=self._sample_rate, device=pw_dev)
                 # Poll _running during playback so stop() can interrupt us
                 # without relying on cross-thread sd.stop() (unreliable with PipeWire)
                 stream = sd.get_stream()
+                pulse_start = time.monotonic()
                 while stream and stream.active:
                     if not self._running:
                         sd.stop()
                         break
+                    pulse = 0.7 + 0.3 * math.sin((time.monotonic() - pulse_start) * 10)
+                    self._emit_audio_level(level * pulse)
                     time.sleep(0.05)
+                self._emit_audio_level(0.0)
             except Exception:
                 log.exception("Audio playback error")
+
+    def _emit_audio_level(self, level: float):
+        callback = self._on_audio_level
+        if callback is None:
+            return
+        try:
+            callback(max(0.0, min(1.0, float(level))))
+        except Exception:
+            pass
+
+    @staticmethod
+    def _audio_level(audio) -> float:
+        try:
+            import numpy as np
+            if len(audio) == 0:
+                return 0.0
+            rms = float(np.sqrt(np.mean(np.square(audio.astype(np.float32)))))
+            return min(1.0, rms * 5.0)
+        except Exception:
+            return 0.0
 
     @staticmethod
     def _drain_queue(q):

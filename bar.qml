@@ -27,6 +27,12 @@ PanelWindow {
         onPressed: vicinaeLauncher.toggleLauncher()
     }
 
+    GlobalShortcut {
+        name: "toggle-vicinae-clipboard"
+        description: "Toggle Vicinae clipboard history"
+        onPressed: vicinaeLauncher.toggleClipboardHistory()
+    }
+
     anchors.top: true
     anchors.left: true
     anchors.right: true

@@ -16,11 +16,15 @@ def runtime_path(name: str) -> Path:
 sock_path = runtime_path("aside-overlay.sock")
 stop_event = threading.Event()
 print_lock = threading.Lock()
+parent_pid = os.getppid()
 
 
 def emit(payload: dict) -> None:
     with print_lock:
-        print(json.dumps(payload, ensure_ascii=False), flush=True)
+        try:
+            print(json.dumps(payload, ensure_ascii=False), flush=True)
+        except BrokenPipeError:
+            stop_event.set()
 
 
 def handle_connection(conn: socket.socket) -> None:
@@ -90,6 +94,9 @@ def main() -> int:
 
     try:
         while not stop_event.is_set():
+            if parent_pid != 1 and os.getppid() != parent_pid:
+                stop_event.set()
+                break
             try:
                 conn, _ = server.accept()
             except socket.timeout:
