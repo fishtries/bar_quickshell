@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell.Services.Notifications
 import "../core"
 
@@ -14,6 +15,7 @@ Item {
     property var pendingStackKeys: []
     property var appearedNotificationKeys: []
     readonly property int stackRevision: NotificationState.stackRevision
+    readonly property int stackPromotionRevision: NotificationState.stackPromotionRevision
 
     readonly property int cardWidth: 280
     readonly property int cardHeight: 56
@@ -21,6 +23,35 @@ Item {
     readonly property int spacing: 6
     readonly property int entryOffset: 72
     readonly property int stackCollapseDelay: 560
+    readonly property int promotionShiftDistance: cardHeight + spacing
+    property var promotedGhostNotification: null
+    property string promotedGhostAppName: ""
+    property string promotedGhostSummary: ""
+    property real promotedGhostOffsetY: 0
+    property real promotedGhostOpacity: 0
+    property bool promotedGhostVisible: false
+    property bool pendingPromotionAnimation: false
+    property bool pendingPromotionListShift: false
+    property real stackShiftOffsetY: 0
+    property real viewportHeight: 0
+    property real bottomFadeHeight: 0
+    property Item promotionOverlayParent: null
+    property real promotionOverlayX: 0
+    property real promotionOverlayY: 0
+    property real promotionOverlayZ: 1000
+
+    function bottomFadeOpacity(itemY, itemHeight) {
+        if (root.viewportHeight <= 0 || root.bottomFadeHeight <= 0)
+            return 1.0
+
+        const fadeStart = root.viewportHeight - root.bottomFadeHeight
+        const fadeAnchor = itemY + itemHeight
+        return Math.max(0.0, Math.min(1.0, (root.viewportHeight - fadeAnchor) / Math.max(1.0, root.viewportHeight - fadeStart)))
+    }
+
+    function bottomBlurProgress(itemY, itemHeight) {
+        return 1.0 - bottomFadeOpacity(itemY, itemHeight)
+    }
 
     function notificationAppName(notification) {
         const label = notification ? (((notification.appName || notification.desktopEntry || "System") + "").trim()) : "System"
@@ -41,6 +72,26 @@ Item {
             return body.slice(0, separator).trim()
 
         return notificationAppName(notification)
+    }
+
+    function notificationSummaryText(notification) {
+        return notification ? (((notification.summary || "") + "").trim()) : ""
+    }
+
+    function notificationBodyText(notification) {
+        return notification ? (((notification.body || "") + "").trim()) : ""
+    }
+
+    function notificationCountText(count) {
+        return count + (count === 1 ? " notification" : " notifications")
+    }
+
+    function cardPrimaryText(notification, collapsedTopCard, senderName) {
+        return collapsedTopCard ? senderName : notificationSummaryText(notification)
+    }
+
+    function cardSecondaryText(notification, collapsedTopCard, count) {
+        return collapsedTopCard ? notificationCountText(count) : notificationBodyText(notification)
     }
 
     function notificationGroupKey(notification) {
@@ -64,6 +115,64 @@ Item {
             return
 
         appearedNotificationKeys = appearedNotificationKeys.concat(key)
+    }
+
+    function groupModelItemForNotification(notification) {
+        if (!notification)
+            return null
+
+        for (var i = 0; i < groupModel.count; i++) {
+            var group = groupModel.get(i)
+            var notifications = group.notifications || []
+            for (var j = 0; j < notifications.length; j++) {
+                if (notifications[j] === notification)
+                    return group
+            }
+        }
+
+        return null
+    }
+
+    function promotedPrimary(notification, group) {
+        if (group && group.stacked && root.expandedGroupKey !== group.groupKey)
+            return group.senderName
+
+        return notificationSummaryText(notification)
+    }
+
+    function promotedSecondary(notification, group) {
+        if (group && group.stacked && root.expandedGroupKey !== group.groupKey)
+            return notificationCountText(group.notifCount)
+
+        return notificationBodyText(notification)
+    }
+
+    function prepareStackPromotionAnimation(notification) {
+        if (!notification)
+            return
+
+        var group = groupModelItemForNotification(notification)
+        pendingPromotionAnimation = true
+        pendingPromotionListShift = group && group.notifCount > 1
+        promotedGhostNotification = notification
+        promotedGhostAppName = promotedPrimary(notification, group)
+        promotedGhostSummary = promotedSecondary(notification, group)
+        promotedGhostOffsetY = 0
+        promotedGhostOpacity = 1
+        promotedGhostVisible = false
+    }
+
+    function startPendingPromotionAnimation() {
+        if (!pendingPromotionAnimation)
+            return
+
+        pendingPromotionAnimation = false
+        promotionAnimation.stop()
+        stackShiftOffsetY = pendingPromotionListShift ? promotionShiftDistance : 0
+        promotedGhostOffsetY = 0
+        promotedGhostOpacity = 1
+        promotedGhostVisible = true
+        promotionAnimation.restart()
     }
 
     function stackReadyForGroup(groupKey) {
@@ -210,6 +319,14 @@ Item {
         var nextGroups = buildGroups()
         if (nextGroups.length === 0) {
             expandedGroupKey = ""
+            if (pendingPromotionAnimation) {
+                fadeOutTimer.stop()
+                groupModel.clear()
+                isFadingOut = false
+                startPendingPromotionAnimation()
+                return
+            }
+
             if (groupModel.count > 0 && !isFadingOut) {
                 isFadingOut = true
                 fadeOutTimer.restart()
@@ -243,6 +360,8 @@ Item {
                 updateGroupModelItem(target, group)
             }
         }
+
+        startPendingPromotionAnimation()
     }
 
     function toggleGroup(groupKey) {
@@ -255,6 +374,7 @@ Item {
     }
 
     Component.onCompleted: syncGroups()
+    onStackPromotionRevisionChanged: prepareStackPromotionAnimation(NotificationState.promotedStackNotification)
     onStackRevisionChanged: syncGroups()
     onAllNotificationsChanged: syncGroups()
     onIslandNotificationChanged: syncGroups()
@@ -262,7 +382,7 @@ Item {
     implicitWidth: cardWidth
     implicitHeight: {
         if (groupModel.count === 0)
-            return 0
+            return promotedGhostVisible ? cardHeight : 0
 
         var h = 0
         for (var i = 0; i < groupModel.count; i++) {
@@ -284,8 +404,9 @@ Item {
     }
 
     opacity: isFadingOut ? 0.0 : 1.0
-    visible: groupModel.count > 0 || isFadingOut
+    visible: groupModel.count > 0 || isFadingOut || promotedGhostVisible
     Behavior on opacity { NumberAnimation { duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingDefaultOut } }
+    Behavior on implicitHeight { NumberAnimation { duration: 360; easing.type: Easing.OutQuad } }
 
     Timer {
         id: fadeOutTimer
@@ -304,23 +425,48 @@ Item {
         onTriggered: root.finishPendingStackCollapses()
     }
 
-    Column {
-        id: cardList
-        anchors.fill: parent
-        spacing: root.spacing
+    ParallelAnimation {
+        id: promotionAnimation
+        NumberAnimation { target: root; property: "stackShiftOffsetY"; to: 0; duration: 360; easing.type: Easing.OutCubic }
+        NumberAnimation { target: root; property: "promotedGhostOffsetY"; to: -root.promotionShiftDistance; duration: 360; easing.type: Easing.OutCubic }
+        NumberAnimation { target: root; property: "promotedGhostOpacity"; to: 0; duration: 360; easing.type: Easing.OutQuad }
+        onStopped: {
+            root.stackShiftOffsetY = 0
+            root.promotedGhostVisible = false
+            root.promotedGhostNotification = null
+            root.promotedGhostOpacity = 0
+            root.promotedGhostOffsetY = 0
+            root.pendingPromotionListShift = false
+        }
+    }
 
-        move: Transition {
-            NumberAnimation {
-                properties: "x,y"
-                duration: 360
-                easing.type: Easing.OutQuad
-            }
+    ListView {
+        id: cardList
+        width: parent.width
+        height: contentHeight
+        interactive: false
+        spacing: root.spacing
+        model: groupModel
+
+        transform: Translate {
+            y: root.stackShiftOffsetY
         }
 
-        Repeater {
-            model: groupModel
+        remove: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: 280; easing.type: Easing.OutQuad }
+            NumberAnimation { property: "scale"; to: 0.92; duration: 280; easing.type: Easing.OutQuad }
+            NumberAnimation { property: "y"; to: -root.promotionShiftDistance; duration: 360; easing.type: Easing.OutCubic }
+        }
 
-            Item {
+        removeDisplaced: Transition {
+            NumberAnimation { properties: "x,y"; duration: 360; easing.type: Easing.OutQuad }
+        }
+
+        addDisplaced: Transition {
+            NumberAnimation { properties: "x,y"; duration: 360; easing.type: Easing.OutQuad }
+        }
+
+        delegate: Item {
                 id: cardRoot
                 width: root.cardWidth
                 height: stackedGroup ? (expanded ? expandedHeight : root.stackCardHeight) : expandedHeight
@@ -346,7 +492,6 @@ Item {
                 Behavior on entryOffsetY { NumberAnimation { duration: 360; easing.type: Easing.OutQuint } }
                 Behavior on stackProgress { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
                 Behavior on height { NumberAnimation { duration: 360; easing.type: Easing.OutQuad } }
-                Behavior on y { NumberAnimation { duration: 360; easing.type: Easing.OutQuad } }
 
                 transform: Translate {
                     y: cardRoot.entryOffsetY
@@ -369,6 +514,10 @@ Item {
                         readonly property real targetScale: cardRoot.expanded ? 1.0 : (collapsedLayer === 0 ? 1.0 : collapsedLayer === 1 ? 0.985 : 0.97)
                         readonly property real entryOffsetY: appeared ? 0 : -(expandedY + root.entryOffset)
                         readonly property bool collapsedTopCard: cardRoot.stackProgress >= 0.95 && !cardRoot.expanded && itemIndex === 0
+                        readonly property bool bottomEffectEnabled: cardRoot.expanded && itemIndex >= 6
+                        readonly property real viewportY: cardRoot.y + root.stackShiftOffsetY + y + cardRoot.entryOffsetY
+                        readonly property real fadeOpacity: bottomEffectEnabled ? root.bottomFadeOpacity(viewportY, height) : 1.0
+                        readonly property real blurProgress: bottomEffectEnabled ? root.bottomBlurProgress(viewportY, height) : 0.0
 
                         width: cardRoot.width
                         height: root.cardHeight
@@ -377,7 +526,7 @@ Item {
                         visible: cardRoot.stackProgress < 0.95 || cardRoot.expanded || itemIndex < 3
                         y: expandedY + ((targetY - expandedY) * cardRoot.stackProgress) + entryOffsetY
                         z: cardRoot.expanded || cardRoot.stackProgress < 0.95 ? (totalCount - itemIndex) : (100 - itemIndex)
-                        opacity: (appeared ? 1.0 : 0.0) * (1.0 + ((targetOpacity - 1.0) * cardRoot.stackProgress))
+                        opacity: (appeared ? 1.0 : 0.0) * (1.0 + ((targetOpacity - 1.0) * cardRoot.stackProgress)) * fadeOpacity
                         scale: 1.0 + ((targetScale - 1.0) * cardRoot.stackProgress)
                         Component.onCompleted: if (!appeared) appearTimer.restart()
 
@@ -391,6 +540,12 @@ Item {
                         Behavior on y { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
                         Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutQuad } }
                         Behavior on scale { NumberAnimation { duration: 420; easing.type: Easing.OutBack } }
+                        layer.enabled: blurProgress > 0.01
+                        layer.effect: MultiEffect {
+                            blurEnabled: true
+                            blurMax: AnimationConfig.blurMaxLight
+                            blur: Math.min(1.0, blurProgress * 1.25)
+                        }
 
                         RowLayout {
                             anchors.fill: parent
@@ -414,22 +569,20 @@ Item {
                                 spacing: 1
 
                                 AppText {
-                                    text: notification ? (notification.appName || "System") : ""
+                                    text: root.cardPrimaryText(notification, collapsedTopCard, cardRoot.grpSenderName)
                                     color: "#ffffff"
-                                    font { pixelSize: 11; weight: Font.DemiBold }
-                                    opacity: 0.5
+                                    font { pixelSize: 14; weight: Font.DemiBold }
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
                                 }
 
                                 AppText {
-                                    text: collapsedTopCard
-                                        ? (cardRoot.grpSenderName + " · " + cardRoot.grpCount + " notifications")
-                                        : (notification ? (notification.summary || notification.body || "") : "")
-                                    color: "#ffffff"
-                                    font { pixelSize: 14; weight: Font.Bold }
+                                    text: root.cardSecondaryText(notification, collapsedTopCard, cardRoot.grpCount)
+                                    color: "#cccccc"
+                                    font.pixelSize: 11
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
+                                    visible: text !== ""
                                 }
                             }
                         }
@@ -487,6 +640,55 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.toggleGroup(cardRoot.grpKey)
                     }
+            }
+        }
+    }
+
+    Rectangle {
+        parent: root.promotionOverlayParent ? root.promotionOverlayParent : root
+        visible: root.visible && root.promotedGhostVisible && root.promotedGhostNotification !== null
+        width: root.cardWidth
+        height: root.cardHeight
+        radius: 22
+        color: "#000000"
+        x: root.promotionOverlayParent ? root.promotionOverlayX : 0
+        y: (root.promotionOverlayParent ? root.promotionOverlayY : 0) + root.promotedGhostOffsetY
+        z: root.promotionOverlayZ
+        opacity: root.promotedGhostOpacity
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 14
+            anchors.rightMargin: 14
+            spacing: 10
+
+            AppIcon {
+                text: "\udb80\udd70"
+                font.pixelSize: 18
+                color: Theme.info
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 1
+
+                AppText {
+                    text: root.promotedGhostAppName
+                    color: "#ffffff"
+                    font { pixelSize: 14; weight: Font.DemiBold }
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                AppText {
+                    text: root.promotedGhostSummary
+                    color: "#cccccc"
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    visible: text !== ""
                 }
             }
         }

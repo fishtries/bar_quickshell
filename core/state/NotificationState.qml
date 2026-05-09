@@ -13,6 +13,7 @@ Item {
     id: root
 
     signal newNotification(var notification)
+    signal specialTelegramMessageReceived()
 
     // ─── Presented notification tracking ───────────────────────────────
     // Notifications that have already been shown in the island.
@@ -23,6 +24,29 @@ Item {
     property var notificationRefs: []
     property var notificationIds: []
     property int nextNotificationId: 1
+    property bool doNotDisturb: false
+    property var promotedStackNotification: null
+    property int stackPromotionRevision: 0
+    readonly property string specialContactName: "Аделия Зайка"
+
+    function matchesSpecialTelegramNotification(notification) {
+        if (!notification)
+            return false
+
+        const target = root.specialContactName.toLowerCase()
+        const appLabel = ((notification.appName || notification.desktopEntry || "") + "").toLowerCase()
+        const summaryLabel = ((notification.summary || "") + "").toLowerCase()
+        const bodyLabel = ((notification.body || "") + "").toLowerCase()
+        const isTelegram = appLabel.indexOf("telegram") !== -1
+        const bodyStartsWithName = bodyLabel === target || bodyLabel.indexOf(target + ":") === 0 || bodyLabel.indexOf(target + "\n") === 0
+
+        return isTelegram && (summaryLabel.indexOf(target) !== -1 || bodyStartsWithName)
+    }
+
+    function notifyIslandNotificationShown(notification) {
+        if (root.matchesSpecialTelegramNotification(notification))
+            root.specialTelegramMessageReceived()
+    }
 
     function markPresented(notif) {
         if (notif && !isPresented(notif))
@@ -107,6 +131,8 @@ Item {
             return null
 
         var notification = stackNotifications[0]
+        promotedStackNotification = notification
+        stackPromotionRevision += 1
         var next = stackNotifications.slice(1)
         stackNotifications = next
         stackRevision += 1

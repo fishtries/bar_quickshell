@@ -152,6 +152,14 @@ PanelWindow {
     }
 
     function toggleLauncher() {
+        if (visible && !opened && !closing) {
+            if (inputMorphProgress > 0.15 || contentRevealProgress > 0.15 || orbTravelProgress > 0.55)
+                closeLauncher()
+            else
+                startOpenSequence()
+            return
+        }
+
         if (visible && !closing)
             closeLauncher()
         else
@@ -171,6 +179,14 @@ PanelWindow {
     }
 
     function toggleClipboardHistory() {
+        if (visible && !opened && !closing) {
+            if (clipboardMode && (inputMorphProgress > 0.15 || contentRevealProgress > 0.15 || orbTravelProgress > 0.55))
+                closeLauncher()
+            else
+                openClipboardHistory()
+            return
+        }
+
         if (visible && !closing && clipboardMode) {
             closeLauncher()
             return

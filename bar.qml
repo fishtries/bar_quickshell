@@ -61,11 +61,12 @@ PanelWindow {
         Region { item: ccModule }
         Region { item: ccModule.popoutItem.maskItem }
         Region { item: audioVis.popoutMaskItem }
-        Region { item: notifCards }
+        Region { item: notifCardsWrapper }
     }
     
     Item {
         id: layoutContainer
+        z: 10
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
@@ -186,8 +187,8 @@ PanelWindow {
     }
 
     // ─── Notification cards below the island ────────────────────────────
-    NotifCardStack {
-        id: notifCards
+    Item {
+        id: notifCardsWrapper
         anchors.right: parent.right
         anchors.rightMargin: 20
         visible: !ccModule.popoutOpen && ccModule.isNotifIsland
@@ -197,7 +198,26 @@ PanelWindow {
             return islandBottom + 8
         }
         Behavior on y { NumberAnimation { duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingDefaultOut } }
-        islandNotification: ccModule.currentNotification
+
+        readonly property int bottomFadeHeight: 260
+        readonly property real availableHeight: Math.max(0, 800 - y - 20)
+        readonly property bool contentOverflows: notifCards.implicitHeight > availableHeight
+        width: notifCards.implicitWidth
+        height: contentOverflows ? availableHeight : notifCards.implicitHeight
+        clip: true
+
+        NotifCardStack {
+            id: notifCards
+            width: notifCardsWrapper.width
+            height: implicitHeight
+            islandNotification: ccModule.currentNotification
+            viewportHeight: notifCardsWrapper.height
+            bottomFadeHeight: notifCardsWrapper.bottomFadeHeight
+            promotionOverlayParent: notifCardsWrapper.parent
+            promotionOverlayX: notifCardsWrapper.x
+            promotionOverlayY: notifCardsWrapper.y
+            promotionOverlayZ: layoutContainer.z - 1
+        }
     }
 
     VicinaePopup {

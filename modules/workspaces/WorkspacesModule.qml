@@ -31,18 +31,19 @@ Rectangle {
     readonly property int reminderIslandWidth: root.showCustomReminderPicker ? 920 : 980
     readonly property int reminderIslandHeight: root.showCustomReminderPicker ? 440 : 136
     readonly property bool asideVoiceIsland: root.isAsideIsland && Aside.AsideState.voiceSession
+    readonly property bool asideDecoratedIsland: root.isAsideIsland
     readonly property real asideVoiceLevel: Math.max(0, Math.min(1, Aside.AsideState.audioLevel))
-    readonly property real asideGlowEnergy: root.asideVoiceIsland ? Math.max(root.asideVoiceLevel, Aside.AsideState.phase === "listening" ? 0.08 : (Aside.AsideState.isBusy ? 0.14 : 0.04)) : 0
-    readonly property real asideVoiceTrackThickness: root.asideVoiceIsland ? 4 + root.asideGlowEnergy * 1.5 : 0
-    readonly property real asideVoiceTrailLength: root.asideVoiceIsland ? 0.18 + root.asideGlowEnergy * 0.05 : 0
-    readonly property int asideIslandWidth: root.asideVoiceIsland ? 840 : 760
-    readonly property int asideIslandHeight: root.asideVoiceIsland ? (Aside.AsideState.hasConversation ? (Aside.AsideState.phase === "listening" ? 184 : 402) : 132) : (Aside.AsideState.hasConversation ? (Aside.AsideState.inputRequested ? 430 : 382) : (Aside.AsideState.inputRequested ? 146 : 96))
+    readonly property real asideGlowEnergy: root.asideDecoratedIsland ? Math.max(root.asideVoiceIsland ? root.asideVoiceLevel : 0, root.asideVoiceIsland ? (Aside.AsideState.phase === "listening" ? 0.08 : (Aside.AsideState.isBusy ? 0.14 : 0.04)) : (Aside.AsideState.isBusy ? 0.11 : (Aside.AsideState.inputRequested ? 0.055 : 0.035))) : 0
+    readonly property real asideVoiceTrackThickness: root.asideDecoratedIsland ? (root.asideVoiceIsland ? 6 + root.asideGlowEnergy * 2.0 : 4 + root.asideGlowEnergy * 1.2) : 0
+    readonly property real asideVoiceTrailLength: root.asideDecoratedIsland ? (root.asideVoiceIsland ? 0.18 + root.asideGlowEnergy * 0.05 : 0.13 + root.asideGlowEnergy * 0.035) : 0
+    readonly property int asideIslandWidth: root.asideVoiceIsland ? 540 : 760
+    readonly property int asideIslandHeight: root.asideVoiceIsland ? (Aside.AsideState.hasConversation ? (Aside.AsideState.phase === "listening" ? 92 : 270) : 54) : (Aside.AsideState.hasConversation ? (Aside.AsideState.inputRequested ? 430 : 382) : (Aside.AsideState.inputRequested ? 146 : 96))
     property real asideGlowProgress: 0.0
     
     color: isIsland ? "#000000" : Theme.localPanelForItem(root)
     radius: isIsland ? (isReminderIsland ? 26 : (isAsideIsland ? 28 : 18)) : Theme.radiusPanel
-    border.width: root.asideVoiceIsland ? 2 : 0
-    border.color: root.asideVoiceIsland ? Qt.rgba(1, 1, 1, 0.88) : "transparent"
+    border.width: root.asideDecoratedIsland ? (root.asideVoiceIsland ? 3 : 2) : 0
+    border.color: root.asideDecoratedIsland ? Qt.rgba(1, 1, 1, root.asideVoiceIsland ? 0.95 : 0.82) : "transparent"
     z: isIsland ? 100 : 0
     property bool interactionEnabled: true
     readonly property real launcherAnchorX: width
@@ -635,27 +636,24 @@ Rectangle {
     Timer {
         interval: 16
         repeat: true
-        running: root.asideVoiceIsland
-        onTriggered: root.asideGlowProgress = (root.asideGlowProgress + 0.0028 + root.asideGlowEnergy * 0.018) % 1.0
+        running: root.asideDecoratedIsland
+        onTriggered: root.asideGlowProgress = (root.asideGlowProgress + 0.0012 + root.asideGlowEnergy * 0.0006) % 1.0
     }
 
     Rectangle {
         anchors.fill: parent
-        anchors.margins: -2
-        visible: root.asideVoiceIsland
-        opacity: root.asideVoiceIsland ? 1 : 0
-        radius: root.radius + 2
+        anchors.margins: -4
+        visible: root.asideDecoratedIsland
+        opacity: root.asideDecoratedIsland ? (root.asideVoiceIsland ? 1 : 0.72) : 0
+        radius: root.radius + 4
         color: "transparent"
-        border.width: 2
-        border.color: Qt.rgba(1, 1, 1, 0.36 + root.asideGlowEnergy * 0.20)
+        border.width: root.asideVoiceIsland ? 4 : 3
+        border.color: Qt.rgba(1, 1, 1, root.asideVoiceIsland ? 0.65 + root.asideGlowEnergy * 0.35 : 0.46 + root.asideGlowEnergy * 0.24)
         layer.enabled: visible
         layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: Qt.rgba(1, 1, 1, 0.36 + root.asideGlowEnergy * 0.28)
-            shadowBlur: 0.75
-            shadowScale: 1.04
-            shadowHorizontalOffset: 0
-            shadowVerticalOffset: 0
+            blurEnabled: true
+            blurMax: 48
+            blur: (root.asideVoiceIsland ? 0.5 : 0.36) + root.asideGlowEnergy * 0.25
         }
         Behavior on opacity { NumberAnimation { duration: 160 } }
         Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -664,24 +662,24 @@ Rectangle {
     Canvas {
         id: asideVoiceTrailCanvas
         anchors.fill: parent
-        visible: root.asideVoiceIsland
-        opacity: root.asideVoiceIsland ? 1 : 0
+        visible: root.asideDecoratedIsland
+        opacity: root.asideDecoratedIsland ? (root.asideVoiceIsland ? 1 : 0.78) : 0
         onPaint: {
             let ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            if (!root.asideVoiceIsland)
+            if (!root.asideDecoratedIsland)
                 return
 
             let steps = 140
             let margin = 1
-            let start = root.asideGlowProgress
-            let end = root.asideGlowProgress + root.asideVoiceTrailLength
-            let startPoint = root.asideRoundedBorderPoint(start, margin)
-            let endPoint = root.asideRoundedBorderPoint(end, margin)
-            let gradient = ctx.createLinearGradient(startPoint.x, startPoint.y, endPoint.x, endPoint.y)
+            let head = root.asideGlowProgress
+            let tail = root.asideGlowProgress - root.asideVoiceTrailLength
+            let tailPoint = root.asideRoundedBorderPoint(tail, margin)
+            let headPoint = root.asideRoundedBorderPoint(head, margin)
+            let gradient = ctx.createLinearGradient(tailPoint.x, tailPoint.y, headPoint.x, headPoint.y)
             gradient.addColorStop(0.0, "rgba(255,255,255,0.00)")
-            gradient.addColorStop(0.55, "rgba(255,255,255,0.42)")
-            gradient.addColorStop(1.0, "rgba(255,255,255,0.98)")
+            gradient.addColorStop(0.42, root.asideVoiceIsland ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.56)")
+            gradient.addColorStop(1.0, root.asideVoiceIsland ? "rgba(255,255,255,1.00)" : "rgba(255,255,255,0.82)")
             ctx.lineCap = "round"
             ctx.lineJoin = "round"
             ctx.lineWidth = root.asideVoiceTrackThickness
@@ -689,7 +687,7 @@ Rectangle {
 
             ctx.beginPath()
             for (let i = 0; i <= steps; ++i) {
-                let point = root.asideRoundedBorderPoint(start + root.asideVoiceTrailLength * (i / steps), margin)
+                let point = root.asideRoundedBorderPoint(tail + root.asideVoiceTrailLength * (i / steps), margin)
                 if (i === 0)
                     ctx.moveTo(point.x, point.y)
                 else
@@ -1193,23 +1191,25 @@ Rectangle {
             spacing: root.asideVoiceIsland ? 14 : 10
 
             RowLayout {
+                visible: !root.asideVoiceIsland
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.asideVoiceIsland ? 48 : 42
                 spacing: 12
 
                 Rectangle {
+                    visible: !root.asideVoiceIsland
                     Layout.preferredWidth: root.asideVoiceIsland ? 48 : 42
                     Layout.preferredHeight: root.asideVoiceIsland ? 48 : 42
                     radius: root.asideVoiceIsland ? 20 : 16
-                    color: root.asideVoiceIsland ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.14)
+                    color: Qt.rgba(1, 1, 1, root.asideVoiceIsland ? 0.08 : 0.075)
                     border.width: 1
-                    border.color: root.asideVoiceIsland ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.35)
+                    border.color: Qt.rgba(1, 1, 1, root.asideVoiceIsland ? 0.16 : 0.12)
 
                     AppIcon {
                         anchors.centerIn: parent
                         text: Aside.AsideState.phase === "listening" ? "󰍬" : "󰚩"
                         font.pixelSize: root.asideVoiceIsland ? 22 : 20
-                        color: Theme.info
+                        color: "#ffffff"
                     }
 
                     layer.enabled: false
@@ -1224,6 +1224,7 @@ Rectangle {
                 }
 
                 ColumnLayout {
+                    visible: !root.asideVoiceIsland
                     Layout.preferredWidth: root.asideVoiceIsland ? 260 : 190
                     Layout.fillWidth: root.asideVoiceIsland
                     spacing: 2
@@ -1283,15 +1284,15 @@ Rectangle {
                     Layout.preferredWidth: 34
                     Layout.preferredHeight: 34
                     radius: 17
-                    color: asideMicMouse.containsMouse || Aside.AsideState.phase === "listening" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.22) : Qt.rgba(1, 1, 1, 0.08)
+                    color: asideMicMouse.containsMouse || Aside.AsideState.phase === "listening" ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
                     border.width: 1
-                    border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, asideMicMouse.containsMouse || Aside.AsideState.phase === "listening" ? 0.40 : 0.16)
+                    border.color: Qt.rgba(1, 1, 1, asideMicMouse.containsMouse || Aside.AsideState.phase === "listening" ? 0.24 : 0.12)
 
                     AppIcon {
                         anchors.centerIn: parent
                         text: "󰍬"
                         font.pixelSize: 14
-                        color: Aside.AsideState.phase === "listening" ? Theme.info : "#ffffff"
+                        color: "#ffffff"
                     }
 
                     MouseArea {
@@ -1304,6 +1305,7 @@ Rectangle {
                 }
 
                 Rectangle {
+                    visible: !root.asideVoiceIsland
                     Layout.preferredWidth: 34
                     Layout.preferredHeight: 34
                     radius: 17
@@ -1362,12 +1364,12 @@ Rectangle {
 
                             visible: shouldDisplay
                             width: voiceUser ? Math.min(asideMessageStack.width, 620) : asideMessageStack.width
-                            height: shouldDisplay ? Math.max(root.asideVoiceIsland ? 72 : 50, asideRoleLabel.implicitHeight + asideMessageText.implicitHeight + (root.asideVoiceIsland ? 30 : 20)) : 0
+                            height: shouldDisplay ? Math.max(root.asideVoiceIsland ? 72 : 54, asideRoleLabel.implicitHeight + asideMessageText.implicitHeight + (root.asideVoiceIsland ? 30 : 24)) : 0
                             x: voiceUser ? (asideMessageStack.width - width) / 2 : 0
-                            radius: root.asideVoiceIsland ? 24 : 18
-                            color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, root.asideVoiceIsland ? 0.18 : 0.13) : Qt.rgba(1, 1, 1, root.asideVoiceIsland ? 0.095 : 0.075)
-                            border.width: 1
-                            border.color: model.role === "user" ? Qt.rgba(0.35, 0.78, 1.0, root.asideVoiceIsland ? 0.42 : 0.30) : Qt.rgba(1, 1, 1, root.asideVoiceIsland ? 0.15 : 0.10)
+                            radius: root.asideVoiceIsland ? 24 : 20
+                            color: root.asideVoiceIsland && model.role === "user" ? "transparent" : Qt.rgba(1, 1, 1, model.role === "user" ? (root.asideVoiceIsland ? 0 : 0.085) : (root.asideVoiceIsland ? 0.095 : 0.075))
+                            border.width: root.asideVoiceIsland && model.role === "user" ? 0 : 1
+                            border.color: root.asideVoiceIsland && model.role === "user" ? "transparent" : Qt.rgba(1, 1, 1, model.role === "user" ? 0.16 : (root.asideVoiceIsland ? 0.15 : 0.10))
                             opacity: shouldDisplay ? 1 : 0
                             scale: shouldDisplay ? 1 : 0.96
                             layer.enabled: false
@@ -1388,11 +1390,12 @@ Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.top: parent.top
-                                anchors.leftMargin: root.asideVoiceIsland ? 16 : 10
-                                anchors.rightMargin: root.asideVoiceIsland ? 16 : 10
-                                anchors.topMargin: root.asideVoiceIsland ? 12 : 8
+                                anchors.leftMargin: root.asideVoiceIsland ? 16 : 12
+                                anchors.rightMargin: root.asideVoiceIsland ? 16 : 12
+                                anchors.topMargin: root.asideVoiceIsland ? 12 : 9
+                                visible: !root.asideVoiceIsland
                                 text: model.role === "user" ? (root.asideVoiceIsland ? "Распознано" : "You") : (root.asideVoiceIsland ? "Ответ" : "Aside")
-                                color: model.role === "user" ? Theme.info : "#ffffff"
+                                color: model.role === "user" ? "#ffffff" : "#ffffff"
                                 font { pixelSize: root.asideVoiceIsland ? 12 : 11; weight: Font.Bold }
                                 elide: Text.ElideRight
                             }
@@ -1401,11 +1404,11 @@ Rectangle {
                                 id: asideMessageText
                                 anchors.left: parent.left
                                 anchors.right: parent.right
-                                anchors.top: asideRoleLabel.bottom
-                                anchors.leftMargin: root.asideVoiceIsland ? 16 : 10
-                                anchors.rightMargin: root.asideVoiceIsland ? 16 : 10
-                                anchors.topMargin: root.asideVoiceIsland ? 7 : 4
-                                text: model.text === "" && model.role === "assistant" && Aside.AsideState.isBusy ? "…" : (model.text === "" && model.role === "user" && Aside.AsideState.phase === "listening" ? "Слушаю…" : model.text)
+                                anchors.top: root.asideVoiceIsland ? parent.top : asideRoleLabel.bottom
+                                anchors.leftMargin: root.asideVoiceIsland ? 16 : 12
+                                anchors.rightMargin: root.asideVoiceIsland ? 16 : 12
+                                anchors.topMargin: root.asideVoiceIsland ? 16 : 4
+                                text: model.text === "" && model.role === "assistant" && Aside.AsideState.isBusy ? "…" : (model.text === "" && model.role === "user" && Aside.AsideState.phase === "listening" ? "…" : model.text)
                                 color: "#eeeeee"
                                 font.family: Theme.fontPrimary
                                 font.pixelSize: root.asideVoiceIsland ? (model.role === "user" ? 18 : 15) : 13
@@ -1426,9 +1429,9 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: visible ? 42 : 0
                 radius: 21
-                color: asideInput.activeFocus ? Qt.rgba(1, 1, 1, 0.11) : Qt.rgba(1, 1, 1, 0.075)
+                color: asideInput.activeFocus ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.075)
                 border.width: 1
-                border.color: asideInput.activeFocus ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.48) : Qt.rgba(1, 1, 1, 0.12)
+                border.color: asideInput.activeFocus ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(1, 1, 1, 0.12)
 
                 RowLayout {
                     anchors.fill: parent
@@ -1478,14 +1481,14 @@ Rectangle {
                         Layout.preferredWidth: 32
                         Layout.preferredHeight: 32
                         radius: 16
-                        color: asideSendMouse.containsMouse ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.30) : Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.16)
+                        color: asideSendMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.10)
                         opacity: asideInput.text.trim() !== "" && Aside.AsideState.daemonAvailable && !Aside.AsideState.isBusy ? 1.0 : 0.45
 
                         AppIcon {
                             anchors.centerIn: parent
                             text: "󰒊"
                             font.pixelSize: 14
-                            color: Theme.info
+                            color: "#ffffff"
                         }
 
                         MouseArea {

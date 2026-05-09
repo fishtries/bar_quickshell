@@ -63,6 +63,17 @@ PopoutWrapper {
     property string btStatus: "off"
     property bool nightLightActive: false
 
+    property bool clearingNotifications: false
+    readonly property int clearNotificationSwipeDuration: 280
+
+    function clearNotificationsWithAnimation() {
+        if (clearingNotifications || notificationList.count === 0)
+            return;
+
+        clearingNotifications = true;
+        clearNotificationsTimer.restart();
+    }
+
     // Сброс страницы при закрытии
     onIsOpenChanged: {
         if (!isOpen) currentPage = "grid";
@@ -80,6 +91,23 @@ PopoutWrapper {
         if (currentPage === "wifi") wifiCCPoller.running = true;
         if (currentPage === "bluetooth") btCCPoller.running = true;
         if (currentPage === "math") MathState.refresh();
+    }
+
+    Timer {
+        id: clearNotificationsTimer
+        interval: root.clearNotificationSwipeDuration
+        repeat: false
+        onTriggered: {
+            NotificationState.clearAll();
+            clearNotificationsFallbackTimer.restart();
+        }
+    }
+
+    Timer {
+        id: clearNotificationsFallbackTimer
+        interval: 260
+        repeat: false
+        onTriggered: root.clearingNotifications = false
     }
 
     // =====================================================================
@@ -224,6 +252,61 @@ PopoutWrapper {
                         }
 
                         Rectangle {
+                            implicitWidth: 124
+                            implicitHeight: 28
+                            radius: 14
+                            color: NotificationState.doNotDisturb ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.22) : (dndMouse.containsMouse ? Theme.bgHover : Theme.bgSubtle)
+                            border.color: NotificationState.doNotDisturb ? Theme.info : "transparent"
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 9
+                                anchors.rightMargin: 6
+                                spacing: 6
+
+                                AppText {
+                                    text: "Do Not Disturb"
+                                    color: NotificationState.doNotDisturb ? Theme.info : Theme.textSecondary
+                                    font { pixelSize: 9; weight: Font.DemiBold }
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                }
+
+                                Rectangle {
+                                    id: dndTrack
+                                    Layout.preferredWidth: 28
+                                    Layout.preferredHeight: 16
+                                    radius: 8
+                                    color: NotificationState.doNotDisturb ? Theme.info : Theme.borderStrong
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                                    Rectangle {
+                                        width: 12
+                                        height: 12
+                                        radius: 6
+                                        x: NotificationState.doNotDisturb ? parent.width - width - 2 : 2
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: NotificationState.doNotDisturb ? Theme.bgElevated : Theme.textSecondary
+                                        Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: dndMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: NotificationState.doNotDisturb = !NotificationState.doNotDisturb
+                            }
+                        }
+
+                        Rectangle {
                             visible: notificationList.count > 0
                             implicitWidth: 28
                             implicitHeight: 28
@@ -243,13 +326,13 @@ PopoutWrapper {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: NotificationState.clearAll()
+                                onClicked: root.clearNotificationsWithAnimation()
                             }
                         }
                     }
 
                     Item {
-                        visible: notificationList.count === 0
+                        visible: notificationList.count === 0 && !root.clearingNotifications
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.preferredHeight: notificationColumn.panelHeight
@@ -264,7 +347,7 @@ PopoutWrapper {
 
                     ListView {
                         id: notificationList
-                        visible: count > 0
+                        visible: count > 0 || root.clearingNotifications
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.preferredHeight: notificationColumn.panelHeight
@@ -279,7 +362,7 @@ PopoutWrapper {
 
                         remove: Transition {
                             NumberAnimation { property: "opacity"; to: 0; duration: 200; easing.type: Easing.InQuad }
-                            NumberAnimation { property: "x"; to: -notificationList.width * 0.2; duration: 250; easing.type: Easing.InQuad }
+                            NumberAnimation { property: "x"; to: -notificationList.width * 1.05; duration: 250; easing.type: Easing.InQuad }
                         }
 
                         displaced: Transition {
@@ -288,6 +371,8 @@ PopoutWrapper {
                         }
 
                         delegate: Rectangle {
+                            id: notificationDelegate
+
                             width: ListView.view ? ListView.view.width : 320
                             height: notificationLayout.implicitHeight + 16
                             radius: 12
@@ -296,9 +381,15 @@ PopoutWrapper {
                             border.width: 1
 
                             property var notificationData: modelData
+                            property real clearOffsetX: root.clearingNotifications ? -notificationList.width * 1.05 : 0
+
+                            transform: Translate {
+                                x: notificationDelegate.clearOffsetX
+                            }
 
                             Behavior on color { ColorAnimation { duration: 150 } }
                             Behavior on border.color { ColorAnimation { duration: 150 } }
+                            Behavior on clearOffsetX { NumberAnimation { duration: root.clearNotificationSwipeDuration; easing.type: Easing.InCubic } }
 
                             MouseArea {
                                 id: notificationMouse

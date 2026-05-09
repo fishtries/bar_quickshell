@@ -154,14 +154,12 @@ Item {
         replyText = ""
         replyKeyboardRequested = false
         if (!currentNotification) {
-            displayedNotification = null
             notifBlurPulse.stop()
             notifBlur = 0.0
-        } else if (!displayedNotification) {
-            displayedNotification = currentNotification
         } else if (displayedNotification !== currentNotification) {
             if (notifBlurPulse.running)
                 notifBlurPulse.stop()
+            displayedNotification = currentNotification
             notifBlurPulse.start()
         }
     }
@@ -169,7 +167,6 @@ Item {
     SequentialAnimation {
         id: notifBlurPulse
         NumberAnimation { target: root; property: "notifBlur"; to: 1.0; duration: AnimationConfig.durationVeryFast; easing.type: AnimationConfig.easingDefaultIn }
-        ScriptAction { script: root.displayedNotification = root.currentNotification }
         NumberAnimation { target: root; property: "notifBlur"; to: 0.0; duration: AnimationConfig.durationDragSnap; easing.type: AnimationConfig.easingDefaultOut }
     }
 
