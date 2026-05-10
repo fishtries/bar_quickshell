@@ -11,7 +11,9 @@ Item {
     readonly property bool searchMode: state === "search"
     readonly property bool clipboardMode: state === "clipboard"
     readonly property bool wallpaperMode: state === "wallpaper"
-    readonly property bool showNoMatches: searchMode && searchState !== null && searchState.resultCount === 0
+    readonly property bool hasSearchQuery: searchState !== null && searchState.query !== undefined && searchState.query.toString().trim() !== ""
+    readonly property bool searchLoading: searchState !== null && (searchState.loadingCatalog || searchState.loadingUsage || searchState.loadingFiles || searchState.loadingFavorites || searchState.loadingWallpapers || searchState.loadingClipboard || searchState.loadingClipboardPreview)
+    readonly property bool showNoMatches: searchMode && searchState !== null && searchState.resultCount === 0 && hasSearchQuery && !searchLoading
 
     signal itemPressed(int index)
     signal itemHovered(int index)
@@ -31,8 +33,12 @@ Item {
     ]
 
     function ensureCurrentVisible() {
-        if (viewLoader.item && viewLoader.item.ensureCurrentVisible)
-            viewLoader.item.ensureCurrentVisible()
+        if (searchMode)
+            results.ensureCurrentVisible()
+        else if (clipboardMode)
+            clipboardView.ensureCurrentVisible()
+        else if (wallpaperMode)
+            wallpaperGallery.ensureCurrentVisible()
     }
 
     Rectangle {
@@ -41,60 +47,71 @@ Item {
         color: Theme.bgSubtle
     }
 
-    Loader {
-        id: viewLoader
+    StackLayout {
+        id: viewStack
 
         anchors.fill: parent
-        anchors.margins: wallpaperMode || showNoMatches ? 0 : 6
-        asynchronous: true
-        sourceComponent: showNoMatches ? noMatchesComponent : clipboardMode ? clipboardComponent : wallpaperMode ? wallpaperComponent : resultsComponent
-        onLoaded: root.ensureCurrentVisible()
-    }
+        currentIndex: clipboardMode ? 1 : wallpaperMode ? 2 : 0
 
-    Component {
-        id: resultsComponent
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.margins: 6
 
-        VicinaeResultsList {
-            anchors.fill: parent
-            model: root.searchState ? root.searchState.resultsModel : null
-            currentIndex: root.searchState ? root.searchState.selectedIndex : -1
-            onItemPressed: function(index) {
-                root.itemPressed(index)
+            VicinaeResultsList {
+                id: results
+
+                anchors.fill: parent
+                model: root.searchState ? root.searchState.resultsModel : null
+                currentIndex: root.searchState ? root.searchState.selectedIndex : -1
+                onItemPressed: function(index) {
+                    root.itemPressed(index)
+                }
+                onItemHovered: function(index) {
+                    root.itemHovered(index)
+                }
+                onItemActivated: function(index) {
+                    root.itemActivated(index)
+                }
             }
-            onItemHovered: function(index) {
-                root.itemHovered(index)
-            }
-            onItemActivated: function(index) {
-                root.itemActivated(index)
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: 8
+                visible: root.showNoMatches
+                z: 2
+
+                AppIcon {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "󰍉"
+                    color: Theme.textSecondary
+                    opacity: 0.75
+                    font.pixelSize: 28
+                }
+
+                AppText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "No matches"
+                    color: Theme.textPrimary
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                }
+
+                AppText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "Try a different keyword"
+                    color: Theme.textSecondary
+                    font.pixelSize: 11
+                }
             }
         }
-    }
-
-    Component {
-        id: wallpaperComponent
-
-        VicinaeWallpaperGallery {
-            anchors.fill: parent
-            model: root.searchState ? root.searchState.resultsModel : null
-            currentIndex: root.searchState ? root.searchState.selectedIndex : -1
-            itemCount: root.searchState ? root.searchState.resultCount : 0
-            onItemPressed: function(index) {
-                root.itemPressed(index)
-            }
-            onItemHovered: function(index) {
-                root.itemHovered(index)
-            }
-            onItemActivated: function(index) {
-                root.itemActivated(index)
-            }
-        }
-    }
-
-    Component {
-        id: clipboardComponent
 
         VicinaeClipboardView {
-            anchors.fill: parent
+            id: clipboardView
+
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.margins: 6
             transitionProgress: root.clipboardTransitionProgress
             model: root.searchState ? root.searchState.clipboardModel : null
             currentIndex: root.searchState ? root.searchState.selectedClipboardIndex : -1
@@ -110,36 +127,23 @@ Item {
                 root.itemActivated(index)
             }
         }
-    }
 
-    Component {
-        id: noMatchesComponent
+        VicinaeWallpaperGallery {
+            id: wallpaperGallery
 
-        ColumnLayout {
-            anchors.centerIn: parent
-            spacing: 8
-
-            AppIcon {
-                Layout.alignment: Qt.AlignHCenter
-                text: "󰍉"
-                color: Theme.textSecondary
-                opacity: 0.75
-                font.pixelSize: 28
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            model: root.searchState ? root.searchState.resultsModel : null
+            currentIndex: root.searchState ? root.searchState.selectedIndex : -1
+            itemCount: root.searchState ? root.searchState.resultCount : 0
+            onItemPressed: function(index) {
+                root.itemPressed(index)
             }
-
-            AppText {
-                Layout.alignment: Qt.AlignHCenter
-                text: "No matches"
-                color: Theme.textPrimary
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
+            onItemHovered: function(index) {
+                root.itemHovered(index)
             }
-
-            AppText {
-                Layout.alignment: Qt.AlignHCenter
-                text: root.searchState && root.searchState.query !== "" ? "Try a different keyword" : "Start typing to search"
-                color: Theme.textSecondary
-                font.pixelSize: 11
+            onItemActivated: function(index) {
+                root.itemActivated(index)
             }
         }
     }
