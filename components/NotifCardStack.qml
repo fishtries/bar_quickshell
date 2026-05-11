@@ -10,9 +10,12 @@ Item {
     property var allNotifications: NotificationState.stackNotifications
     property var islandNotification: null
     property string expandedGroupKey: ""
+    property string visualExpandedGroupKey: ""
+    property string pendingExpandGroupKey: ""
     property bool isFadingOut: false
     property var stackReadyKeys: []
     property var pendingStackKeys: []
+    property var heightRetainedStackKeys: []
     property var appearedNotificationKeys: []
     readonly property int stackRevision: NotificationState.stackRevision
     readonly property int stackPromotionRevision: NotificationState.stackPromotionRevision
@@ -23,6 +26,8 @@ Item {
     readonly property int spacing: 6
     readonly property int entryOffset: 72
     readonly property int stackCollapseDelay: 560
+    readonly property int stackExpandDelay: 180
+    readonly property int stackHeightCollapseDelay: 460
     readonly property int promotionShiftDistance: cardHeight + spacing
     property var promotedGhostNotification: null
     property string promotedGhostAppName: ""
@@ -179,6 +184,25 @@ Item {
         return stackReadyKeys.indexOf(groupKey) !== -1
     }
 
+    function stackHeightCollapsedForGroup(groupKey) {
+        return stackReadyKeys.indexOf(groupKey) !== -1 && heightRetainedStackKeys.indexOf(groupKey) === -1
+    }
+
+    function stackStorageKey(groupKey) {
+        return groupKey.indexOf("group:") === 0 ? groupKey.slice(6) : groupKey
+    }
+
+    function retainStackHeight(groupKey) {
+        var key = stackStorageKey(groupKey)
+        if (key === "")
+            return
+
+        var retained = heightRetainedStackKeys.slice()
+        if (retained.indexOf(key) === -1)
+            retained.push(key)
+        heightRetainedStackKeys = retained
+    }
+
     function scheduleStackCollapse(groupKey) {
         if (stackReadyKeys.indexOf(groupKey) !== -1 || pendingStackKeys.indexOf(groupKey) !== -1)
             return
@@ -192,15 +216,38 @@ Item {
             return
 
         var ready = stackReadyKeys.slice()
+        var retained = heightRetainedStackKeys.slice()
         for (var i = 0; i < pendingStackKeys.length; i++) {
             var key = pendingStackKeys[i]
             if (ready.indexOf(key) === -1)
                 ready.push(key)
+            if (retained.indexOf(key) === -1)
+                retained.push(key)
         }
 
         pendingStackKeys = []
+        heightRetainedStackKeys = retained
         stackReadyKeys = ready
         syncGroups()
+        stackHeightCollapseTimer.restart()
+    }
+
+    function releaseStackHeights() {
+        if (!heightRetainedStackKeys || heightRetainedStackKeys.length === 0)
+            return
+
+        heightRetainedStackKeys = []
+        syncGroups()
+    }
+
+    function finishPendingStackExpansion() {
+        if (pendingExpandGroupKey === "" || expandedGroupKey !== pendingExpandGroupKey) {
+            pendingExpandGroupKey = ""
+            return
+        }
+
+        visualExpandedGroupKey = pendingExpandGroupKey
+        pendingExpandGroupKey = ""
     }
 
     function cleanStackTransitionState(activeStackKeys) {
@@ -211,6 +258,17 @@ Item {
         }
         if (nextReady.length !== stackReadyKeys.length)
             stackReadyKeys = nextReady
+
+        var nextHeightRetained = []
+        for (var h = 0; h < heightRetainedStackKeys.length; h++) {
+            if (activeStackKeys.indexOf(heightRetainedStackKeys[h]) !== -1)
+                nextHeightRetained.push(heightRetainedStackKeys[h])
+        }
+        if (nextHeightRetained.length !== heightRetainedStackKeys.length) {
+            heightRetainedStackKeys = nextHeightRetained
+            if (heightRetainedStackKeys.length === 0)
+                stackHeightCollapseTimer.stop()
+        }
 
         var nextPending = []
         for (var p = 0; p < pendingStackKeys.length; p++) {
@@ -287,6 +345,7 @@ Item {
                 "senderName": group.senderName,
                 "notifCount": notifications.length,
                 "stacked": notifications.length >= 3 && stackReadyForGroup(groupKey),
+                "heightCollapsed": notifications.length >= 3 && stackHeightCollapsedForGroup(groupKey),
                 "notifications": notifications,
                 "firstNotif": notifications[0]
             })
@@ -311,6 +370,7 @@ Item {
         groupModel.setProperty(index, "senderName", group.senderName)
         groupModel.setProperty(index, "notifCount", group.notifCount)
         groupModel.setProperty(index, "stacked", group.stacked)
+        groupModel.setProperty(index, "heightCollapsed", group.heightCollapsed)
         groupModel.setProperty(index, "notifications", group.notifications)
         groupModel.setProperty(index, "firstNotif", group.firstNotif)
     }
@@ -319,6 +379,9 @@ Item {
         var nextGroups = buildGroups()
         if (nextGroups.length === 0) {
             expandedGroupKey = ""
+            visualExpandedGroupKey = ""
+            pendingExpandGroupKey = ""
+            stackExpandTimer.stop()
             if (pendingPromotionAnimation) {
                 fadeOutTimer.stop()
                 groupModel.clear()
@@ -348,6 +411,12 @@ Item {
 
         if (expandedGroupKey !== "" && nextKeys.indexOf(expandedGroupKey) === -1)
             expandedGroupKey = ""
+        if (visualExpandedGroupKey !== "" && nextKeys.indexOf(visualExpandedGroupKey) === -1)
+            visualExpandedGroupKey = ""
+        if (pendingExpandGroupKey !== "" && nextKeys.indexOf(pendingExpandGroupKey) === -1) {
+            pendingExpandGroupKey = ""
+            stackExpandTimer.stop()
+        }
 
         for (var target = 0; target < nextGroups.length; target++) {
             var group = nextGroups[target]
@@ -365,7 +434,27 @@ Item {
     }
 
     function toggleGroup(groupKey) {
-        expandedGroupKey = expandedGroupKey === groupKey ? "" : groupKey
+        if (expandedGroupKey === groupKey) {
+            stackExpandTimer.stop()
+            pendingExpandGroupKey = ""
+            visualExpandedGroupKey = ""
+            retainStackHeight(groupKey)
+            expandedGroupKey = ""
+            syncGroups()
+            stackHeightCollapseTimer.restart()
+            return
+        }
+
+        if (expandedGroupKey !== "") {
+            retainStackHeight(expandedGroupKey)
+            stackHeightCollapseTimer.restart()
+        }
+
+        expandedGroupKey = groupKey
+        visualExpandedGroupKey = ""
+        pendingExpandGroupKey = groupKey
+        syncGroups()
+        stackExpandTimer.restart()
     }
 
     ListModel {
@@ -391,7 +480,7 @@ Item {
             var groupHeight = (group.notifCount * cardHeight) + (Math.max(0, group.notifCount - 1) * spacing)
             if (group.stacked && expanded) {
                 h += groupHeight
-            } else if (group.stacked) {
+            } else if (group.stacked && group.heightCollapsed) {
                 h += stackCardHeight
             } else {
                 h += groupHeight
@@ -423,6 +512,20 @@ Item {
         interval: root.stackCollapseDelay
         repeat: false
         onTriggered: root.finishPendingStackCollapses()
+    }
+
+    Timer {
+        id: stackExpandTimer
+        interval: root.stackExpandDelay
+        repeat: false
+        onTriggered: root.finishPendingStackExpansion()
+    }
+
+    Timer {
+        id: stackHeightCollapseTimer
+        interval: root.stackHeightCollapseDelay
+        repeat: false
+        onTriggered: root.releaseStackHeights()
     }
 
     ParallelAnimation {
@@ -469,7 +572,7 @@ Item {
         delegate: Item {
                 id: cardRoot
                 width: root.cardWidth
-                height: stackedGroup ? (expanded ? expandedHeight : root.stackCardHeight) : expandedHeight
+                height: heightCollapsedGroup && !heightExpanded ? root.stackCardHeight : expandedHeight
 
                 property bool appeared: false
                 property string grpKey: groupKey
@@ -477,9 +580,11 @@ Item {
                 property string grpSenderName: senderName
                 property int grpCount: notifCount
                 property bool stackedGroup: stacked
+                property bool heightCollapsedGroup: heightCollapsed
                 property var firstNotification: firstNotif
                 property var notifItems: notifications || []
-                property bool expanded: root.expandedGroupKey === grpKey
+                property bool heightExpanded: root.expandedGroupKey === grpKey
+                property bool expanded: root.visualExpandedGroupKey === grpKey
                 readonly property int expandedHeight: (notifItems.length * root.cardHeight) + (Math.max(0, notifItems.length - 1) * root.spacing)
                 property real entryOffsetY: 0
                 property real stackProgress: stackedGroup ? 1.0 : 0.0
