@@ -1,17 +1,15 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
-import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 import "../../components"
 import "../../core"
 
 PopoutWrapper {
     id: root
 
-    popoutWidth: (mediaLyrics.model && mediaLyrics.model.count > 0) ? 780 : 393
+    popoutWidth: (lyricsCtrl.lyricsModel && lyricsCtrl.lyricsModel.count > 0) ? 780 : 393
     originX: popoutWidth / 2
     autoClose: false
 
@@ -26,149 +24,12 @@ PopoutWrapper {
     // Новые свойства для прогресса
     property real mediaLength: 0
     property real mediaPosition: 0
-    property int currentLyricIndex: -1
-    property bool manualMode: false
-    property int revealedCount: 0
 
-    Timer {
-        id: restoreAutoScrollTimer
-        interval: 3000 // 3 секунды
-        repeat: false
-        onTriggered: root.manualMode = false
-    }
-
-    // Функция для очистки названий (удаление feat, Remastered и т.д.)
-    function cleanMetadata(text) {
-        if (!text) return "";
-        return text.replace(/\(feat\..*?\)/gi, "")
-                   .replace(/\(with.*?\)/gi, "")
-                   .replace(/\[.*?\]/g, "")
-                   .replace(/\(.*?\)/g, "")
-                   .replace(/- .*?(Remaster|Live|Single|Version|Edit).*/gi, "")
-                   .trim();
-    }
-
-    // Форматирование времени (MS -> MM:SS)
-    function formatTime(s) {
-        if (!s || s < 0) return "00:00";
-        let min = Math.floor(s / 60);
-        let sec = Math.floor(s % 60);
-        return (min < 10 ? "0" + min : min) + ":" + (sec < 10 ? "0" + sec : sec);
-    }
-
-    // Таймер каскадного появления строк (эффект «волны»)
-    Timer {
-        id: revealTimer
-        interval: 150
-        repeat: true
-        onTriggered: {
-            if (root.revealedCount < lyricsModel.count) {
-                root.revealedCount++;
-            } else {
-                revealTimer.stop();
-            }
-        }
-    }
-
-    function startReveal() {
-        root.revealedCount = 0;
-        revealTimer.restart();
-    }
-
-
-
-    function fetchLyrics() {
-        let cleanArtist = cleanMetadata(root.mediaArtist);
-        let cleanTitle = cleanMetadata(root.mediaTitle);
-        
-        if (!cleanArtist || !cleanTitle) return;
-
-        let url = "https://lrclib.net/api/get?artist_name=" + encodeURIComponent(cleanArtist) + "&track_name=" + encodeURIComponent(cleanTitle);
-        
-        console.log("Fetching lyrics: " + cleanArtist + " - " + cleanTitle);
-        
-        let xhr = new XMLHttpRequest();
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                if (xhr.status === 200) {
-                    let json = JSON.parse(xhr.responseText);
-                    lyricsModel.clear();
-                    root.revealedCount = 0;
-                    
-                    if (json.syncedLyrics) {
-                        let lines = json.syncedLyrics.split('\n');
-                        for (let i = 0; i < lines.length; i++) {
-                            let line = lines[i].trim();
-                            // Поддержка [mm:ss.xx], [mm:ss.xxx], [mm:ss]
-                            let match = line.match(/\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)/);
-                            if (match) {
-                                let min = parseInt(match[1]);
-                                let sec = parseFloat(match[2]);
-                                lyricsModel.append({ "time": min * 60 + sec, "line": match[3] });
-                            }
-                        }
-                    } else if (json.plainLyrics) {
-                        // Фаллбэк на обычный текст
-                        let lines = json.plainLyrics.split('\n');
-                        for (let i = 0; i < lines.length; i++) {
-                            if (lines[i].trim()) {
-                                lyricsModel.append({ "time": 0, "line": lines[i].trim() });
-                            }
-                        }
-                    }
-                    // Запускаем каскадное появление
-                    startReveal();
-                } else {
-                    console.log("Lyrics not found for: " + cleanArtist + " - " + cleanTitle);
-                    lyricsModel.clear();
-                    root.revealedCount = 0;
-                }
-            }
-        };
-        xhr.open("GET", url);
-        xhr.send();
-    }
-
-    Timer {
-        id: lyricsDebounceTimer
-        interval: 300
-        repeat: false
-        onTriggered: fetchLyrics()
-    }
-
-    onMediaTitleChanged: { 
-        if (mediaTitle) {
-            lyricsModel.clear();
-            root.revealedCount = 0;
-            root.currentLyricIndex = -1;
-            lyricsDebounceTimer.restart(); 
-            root.manualMode = false; // Сброс при смене трека
-        }
-    }
-
-    onMediaArtistChanged: {
-        if (mediaArtist) {
-            lyricsModel.clear();
-            root.revealedCount = 0;
-            root.currentLyricIndex = -1;
-            lyricsDebounceTimer.restart();
-        }
-    }
-
-    onMediaPositionChanged: updateSync()
-
-    function updateSync() {
-        let newIndex = -1;
-        for (let i = 0; i < lyricsModel.count; i++) {
-            if (lyricsModel.get(i).time <= root.mediaPosition) {
-                newIndex = i;
-            } else {
-                break;
-            }
-        }
-        if (newIndex !== root.currentLyricIndex) {
-            root.currentLyricIndex = newIndex;
-        }
+    LyricsController {
+        id: lyricsCtrl
+        mediaTitle: root.mediaTitle
+        mediaArtist: root.mediaArtist
+        mediaPosition: root.mediaPosition
     }
 
     RowLayout {
@@ -327,7 +188,7 @@ PopoutWrapper {
                     Layout.fillWidth: true
                     
                     Text {
-                        text: root.formatTime(root.mediaPosition)
+                        text: lyricsCtrl.formatTime(root.mediaPosition)
                         color: Theme.textSecondary
                         font.pixelSize: 11
                     }
@@ -335,7 +196,7 @@ PopoutWrapper {
                     Item { Layout.fillWidth: true }
                     
                     Text {
-                        text: root.formatTime(root.mediaLength)
+                        text: lyricsCtrl.formatTime(root.mediaLength)
                         color: Theme.textSecondary
                         font.pixelSize: 11
                     }
@@ -345,7 +206,7 @@ PopoutWrapper {
 
         // ─── ПРАВАЯ ЧАСТЬ: Текст песен (Lyrics) ──────────────────────────
         ColumnLayout {
-            opacity: (mediaLyrics.model && mediaLyrics.model.count > 0) ? 1.0 : 0.0
+            opacity: (lyricsCtrl.lyricsModel && lyricsCtrl.lyricsModel.count > 0) ? 1.0 : 0.0
             visible: opacity > 0
             Behavior on opacity { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
             
@@ -363,172 +224,19 @@ PopoutWrapper {
                 spacing: 16
                 highlightMoveDuration: 600
                 highlightMoveVelocity: -1
-                currentIndex: root.manualMode ? -1 : root.currentLyricIndex
-                highlightRangeMode: root.manualMode ? ListView.NoHighlightRange : ListView.StrictlyEnforceRange
+                currentIndex: lyricsCtrl.currentLyricIndex
+                highlightRangeMode: ListView.StrictlyEnforceRange
                 preferredHighlightBegin: height * 0.25
                 preferredHighlightEnd: height * 0.25
 
-                onDraggingChanged: {
-                    if (dragging) {
-                        root.manualMode = true;
-                        restoreAutoScrollTimer.stop();
-                    } else if (!flicking) {
-                        restoreAutoScrollTimer.restart();
-                    }
-                }
+                model: lyricsCtrl.lyricsModel
 
-                onFlickingChanged: {
-                    if (flicking) {
-                        root.manualMode = true;
-                        restoreAutoScrollTimer.stop();
-                    } else if (!dragging) {
-                        restoreAutoScrollTimer.restart();
-                    }
-                }
-
-                WheelHandler {
-                    target: null
-                    onWheel: event => {
-                        root.manualMode = true;
-                        restoreAutoScrollTimer.restart();
-                        event.accepted = false;
-                    }
-                }
-
-                model: ListModel { id: lyricsModel }
-
-                delegate: Item {
-                    id: lyricContainer
-                    width: ListView.view.width
-                    height: lyricText.implicitHeight + (isActive ? 28 : 0) + Math.max(0, jellyOffset * 9.15)
-                    
-                    readonly property bool isActive: index === root.currentLyricIndex
-                    readonly property bool revealed: index < root.revealedCount
-                    
-                    // ─── Позиция в видимой зоне ───────────────────────
-                    // Центр делегата относительно вьюпорта
-                    readonly property real viewY: y - ListView.view.contentY + height / 2
-                    // Фокусная точка (совпадает с preferredHighlightBegin)
-                    readonly property real focalPoint: ListView.view.height * 0.25
-                    // Расстояние от фокуса (0 = в центре, 1 = у края)
-                    readonly property real distFromFocal: Math.abs(viewY - focalPoint)
-                    readonly property real normalizedDist: Math.min(1.0, distFromFocal / (ListView.view.height * 0.55))
-                    readonly property real bottomFade: Math.max(0.0, Math.min(1.0, (viewY - ListView.view.height * 0.55) / (ListView.view.height * 0.28)))
-                    
-                    Behavior on height { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
-
-                    // ─── Jelly-эффект (пружинистая инерция) ────────────
-                    property real jellyOffset: 0
-                    property real jellyTargetOffset: 0
-                    readonly property int followDelay: {
-                        const trailingDistance = Math.max(0, index - root.currentLyricIndex);
-                        if (trailingDistance === 0 || trailingDistance > 10)
-                            return 0;
-
-                        const headDistance = Math.min(1, trailingDistance);
-                        const tailDistance = Math.max(0, trailingDistance - 1);
-                        const headKick = 1 * (1 - Math.exp(-1.15 * headDistance));
-                        const tailGlide = 1200 * (1 - Math.exp(-0.02 * tailDistance)) + tailDistance * 35;
-                        const computedDelay = 45 + headKick + tailGlide;
-                        return Math.min(200 * index, computedDelay);
-                    }
-
-                    Connections {
-                        target: root
-                        function onCurrentLyricIndexChanged() {
-                            // Подтолкнуть строки пропорционально расстоянию
-                            let trailingDistance = Math.max(0, index - root.currentLyricIndex);
-                            if (trailingDistance > 0 && trailingDistance <= 10) {
-                                lyricContainer.jellyTargetOffset = Math.min(8, 1 + trailingDistance * 12);
-                                settleTimer.stop();
-                                followTimer.restart();
-                            } else {
-                                followTimer.stop();
-                                settleTimer.stop();
-                                lyricContainer.jellyTargetOffset = 0;
-                                lyricContainer.jellyOffset = 0;
-                            }
-                        }
-                    }
-
-                    Behavior on jellyOffset {
-                        SpringAnimation {
-                            spring: 2.2
-                            damping: 0.22
-                        }
-                    }
-
-                    Timer {
-                        id: followTimer
-                        interval: lyricContainer.followDelay
-                        repeat: false
-                        onTriggered: {
-                            lyricContainer.jellyOffset = lyricContainer.jellyTargetOffset;
-                            if (lyricContainer.jellyTargetOffset > 0)
-                                settleTimer.restart();
-                        }
-                    }
-
-                    Timer {
-                        id: settleTimer
-                        interval: 100
-                        repeat: false
-                        onTriggered: lyricContainer.jellyOffset = 0
-                    }
-
-                    HoverHandler {
-                        id: lyricHover
-                    }
-
-                    TapHandler {
-                        onTapped: {
-                            seekProc.command = ["playerctl", "-p", root.mediaPlayer || "spotify,firefox,%any", "position", String(model.time)];
-                            seekProc.running = true;
-                            root.mediaPosition = model.time;
-                            root.currentLyricIndex = index;
-                        }
-                    }
-
-                    Text {
-                        id: lyricText
-                        width: parent.width - 40
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.verticalCenterOffset: lyricContainer.jellyOffset
-                        text: model.line
-                        
-                        // --- Начальное появление (загрузка) ---
-                        property real slideOffset: lyricContainer.revealed ? 0 : 40
-                        transform: Translate { y: lyricText.slideOffset }
-                        Behavior on slideOffset { 
-                            NumberAnimation { duration: 500; easing.type: Easing.OutQuart } 
-                        }
-                        
-                        // --- Плавное появление при reveal ---
-                        property real revealOpacity: lyricContainer.revealed ? 1.0 : 0.0
-                        Behavior on revealOpacity { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
-                        
-                        color: lyricContainer.isActive ? Theme.textPrimary : (lyricHover.hovered ? Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.88) : Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.6))
-                        font {
-                            pixelSize: lyricContainer.isActive ? 18 : 16
-                            bold: lyricContainer.isActive
-                        }
-                        wrapMode: Text.WordWrap
-                        
-                        // Визуалы привязаны к позиции на экране, а не к индексу
-                        opacity: revealOpacity * (lyricContainer.viewY < lyricContainer.focalPoint ? Math.max(0.15, 1.0 - lyricContainer.normalizedDist * 2.15) : Math.max(0.0, 1.0 - lyricContainer.bottomFade * lyricContainer.bottomFade))
-                        scale: Math.max(0.92, 1.0 - lyricContainer.normalizedDist * 0.08)
-                        transformOrigin: Item.Left
-                        
-                        Behavior on color { ColorAnimation { duration: 300 } }
-
-                        layer.enabled: true
-                        layer.effect: MultiEffect {
-                            blurEnabled: !lyricContainer.isActive
-                            blurMax: 24
-                            blur: Math.min(1.0, lyricContainer.normalizedDist * (lyricContainer.viewY < lyricContainer.focalPoint ? 7.5 : 1.5))
-                        }
-                    }
+                delegate: LyricLineItem {
+                    x: 20
+                    width: ListView.view.width - 40
+                    lineText: model.line
+                    isActive: index === lyricsCtrl.currentLyricIndex
+                    isRevealed: index < lyricsCtrl.revealedCount
                 }
             }
         }
