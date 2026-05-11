@@ -1,35 +1,26 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
-import QtQuick.Effects
 
 import "../../components"
 import "../../core"
 import "../../core/state"
-import "../clock"
 
 PopoutWrapper {
     id: root
-    
+
     property bool creatingTask: false
-    property real viewProgress: creatingTask ? 1 : 0
-    property bool keyboardRequested: false
     property var collapsedProjects: ({})
-    property bool dueEnabled: false
-    property var dueDate: new Date()
     property int dueHour: 18
     property int dueMinute: 0
     readonly property string safePrimaryFontFamily: Theme.fontPrimary ? String(Theme.fontPrimary) : ""
     readonly property string safeIconFontFamily: Theme.fontIcon ? String(Theme.fontIcon) : ""
+
     popoutWidth: 380
     animateContentResize: true
     contentResizeDuration: AnimationConfig.durationQuick
     contentResizeEasingType: AnimationConfig.easingDefaultInOut
     autoClose: !root.creatingTask
-
-    Behavior on viewProgress {
-        NumberAnimation { duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultInOut }
-    }
 
     function pad(value) {
         return value < 10 ? "0" + value : "" + value;
@@ -94,152 +85,37 @@ PopoutWrapper {
         TodoState.deleteTodos(uuids);
     }
 
-    function focusTaskInput() {
-        if (!root.isOpen || !root.creatingTask)
-            return;
-
+    function openCreateTask() {
+        root.creatingTask = true;
         taskInput.forceActiveFocus();
-        taskInput.cursorPosition = taskInput.text.length;
     }
 
-    function syncKeyboardRequest() {
-        const shouldRequest = root.isOpen && root.creatingTask;
-        if (shouldRequest === root.keyboardRequested)
-            return;
-
-        root.keyboardRequested = shouldRequest;
-        if (shouldRequest) {
-            FocusState.request();
-            createFocusTimer.stop();
-            createFocusTimer.start();
-        } else {
-            FocusState.release();
-        }
-    }
-
-    function syncCalendarToDueDate() {
-        dueCalendar.selectedDay = root.dueDate.getDate();
-        dueCalendar.selectedMonth = root.dueDate.getMonth() + 1;
-        dueCalendar.selectedYear = root.dueDate.getFullYear();
-        dueCalendar.viewMonth = dueCalendar.selectedMonth;
-        dueCalendar.viewYear = dueCalendar.selectedYear;
-    }
-
-    function initializeDueSelection() {
-        let now = new Date();
-        let roundedMinutes = Math.ceil(now.getMinutes() / 5) * 5;
-        let initialDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
-
-        if (roundedMinutes >= 60) {
-            initialDate.setHours(initialDate.getHours() + 1);
-            roundedMinutes = 0;
-        }
-
-        root.dueDate = initialDate;
-        root.dueHour = initialDate.getHours();
-        root.dueMinute = roundedMinutes;
-        root.syncCalendarToDueDate();
-    }
-
-    function adjustDueHour(delta) {
-        root.dueHour = (root.dueHour + delta + 24) % 24;
-        root.dueEnabled = true;
-        root.dueDate = new Date(root.dueDate.getFullYear(), root.dueDate.getMonth(), root.dueDate.getDate(), root.dueHour, root.dueMinute);
-    }
-
-    function adjustDueMinute(delta) {
-        let total = root.dueHour * 60 + root.dueMinute + delta;
-
-        while (total < 0)
-            total += 24 * 60;
-
-        while (total >= 24 * 60)
-            total -= 24 * 60;
-
-        root.dueHour = Math.floor(total / 60);
-        root.dueMinute = total % 60;
-        root.dueEnabled = true;
-        root.dueDate = new Date(root.dueDate.getFullYear(), root.dueDate.getMonth(), root.dueDate.getDate(), root.dueHour, root.dueMinute);
-    }
-
-    function setDueFromDateKey(dateKey) {
-        let parts = dateKey.split("-");
-
-        if (parts.length !== 3)
-            return;
-
-        root.dueDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), root.dueHour, root.dueMinute);
-        root.dueEnabled = true;
-        root.syncCalendarToDueDate();
-    }
-
-    function formattedDueLabel() {
-        return root.dueEnabled ? Qt.formatDate(root.dueDate, "d MMM yyyy") + " · " + root.pad(root.dueHour) + ":" + root.pad(root.dueMinute) : "No deadline";
-    }
-
-    function dueValue() {
-        return root.dueEnabled ? Qt.formatDate(root.dueDate, "yyyy-MM-dd") + "T" + root.pad(root.dueHour) + ":" + root.pad(root.dueMinute) : "";
+    function closeCreateTask() {
+        root.creatingTask = false;
+        root.resetTaskForm();
     }
 
     function resetTaskForm() {
         taskInput.text = "";
         projectInput.text = "";
-        root.dueEnabled = false;
-        root.initializeDueSelection();
-    }
-
-    function openCreateTask() {
-        root.creatingTask = true;
-        createFocusTimer.stop();
-        createFocusTimer.start();
-    }
-
-    function closeCreateTask() {
-        createFocusTimer.stop();
-        root.creatingTask = false;
-        root.resetTaskForm();
+        dueInput.text = "";
     }
 
     function submitTask() {
-        let description = taskInput.text.trim();
+        let text = taskInput.text.trim();
 
-        if (description === "")
+        if (text === "")
             return;
 
-        TodoState.addTodo(description, projectInput.text, root.dueValue());
-        root.closeCreateTask();
+        if (TodoState.addTodo(text, projectInput.text, dueInput.text))
+            root.closeCreateTask();
     }
 
-    Timer {
-        id: createFocusTimer
-        interval: AnimationConfig.durationUltraFast
-        repeat: false
-        onTriggered: root.focusTaskInput()
+    function suggestedDueValue() {
+        let now = new Date();
+        return Qt.formatDate(now, "yyyy-MM-dd") + "T" + root.pad(root.dueHour) + ":" + root.pad(root.dueMinute);
     }
 
-    // При открытии попаута (isOpen) - обновляем задачи и устанавливаем фокус в поле ввода
-    onIsOpenChanged: {
-        if (isOpen) {
-            root.creatingTask = false;
-            root.resetTaskForm();
-        } else {
-            createFocusTimer.stop();
-            root.creatingTask = false;
-            root.resetTaskForm();
-        }
-        root.syncKeyboardRequest();
-    }
-
-    onCreatingTaskChanged: {
-        root.syncKeyboardRequest();
-    }
-
-    Component.onDestruction: {
-        if (root.keyboardRequested)
-            FocusState.release();
-    }
-
-    // Заголовок
     RowLayout {
         Layout.fillWidth: true
         spacing: 8
@@ -269,78 +145,41 @@ PopoutWrapper {
                 onClicked: root.closeCreateTask()
             }
         }
-        
+
         Text {
+            Layout.fillWidth: true
             text: root.creatingTask ? "New task" : "Tasks"
             color: Theme.textPrimary
             font.family: Theme.fontPrimary
             font.pixelSize: 16
             font.bold: true
-            Layout.fillWidth: true
         }
-        
-        // Кнопка обновления
-        Item {
-            visible: false
-            implicitWidth: 0
-            implicitHeight: 0
-        }
-    }
-    
-    Rectangle {
-        Layout.fillWidth: true
-        visible: false
-        height: 0
-        color: Qt.rgba(1, 1, 1, 0.1)
     }
 
-    // Список/Дерево задач
     Item {
         id: listSection
         Layout.fillWidth: true
-        Layout.preferredHeight: sectionHeight
-        implicitHeight: sectionHeight
+        Layout.preferredHeight: root.creatingTask ? 0 : Math.min(500, Math.max(80, taskListLayout.implicitHeight))
+        implicitHeight: Layout.preferredHeight
+        visible: !root.creatingTask
         clip: true
 
-        // ScrollView автоматически увеличивает размер, но ограничивается 500px, чтобы не вылезать за экран
-        property real fullHeight: Math.min(500, Math.max(80, taskListLayout.implicitHeight))
-        property real sectionHeight: fullHeight * (1 - root.viewProgress)
-
-        Behavior on sectionHeight {
-            NumberAnimation { duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultInOut }
-        }
-        
         ScrollView {
             id: scrollView
             anchors.fill: parent
-            opacity: 1 - root.viewProgress
-            x: -24 * root.viewProgress
-            scale: 1 - 0.03 * root.viewProgress
-            transformOrigin: Item.Top
-            property real targetBlur: root.viewProgress * 0.6
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-            enabled: opacity > 0
-
-            layer.enabled: targetBlur > 0
-            layer.effect: MultiEffect {
-                blurEnabled: true
-                blurMax: 150
-                blur: scrollView.targetBlur
-            }
 
             ColumnLayout {
                 id: taskListLayout
                 width: scrollView.width
                 spacing: 2
-                
-                // Генерация узлов дерева (либо проект, либо задача из корня)
+
                 Repeater {
                     model: TodoState.todoModel
                     delegate: treeNodeDelegate
                 }
-                
-                // Если задач нет
+
                 Item {
                     visible: TodoState.todoModel.length === 0
                     Layout.fillWidth: true
@@ -384,374 +223,157 @@ PopoutWrapper {
             }
         }
     }
-    
-    Rectangle {
+
+    ColumnLayout {
         Layout.fillWidth: true
-        visible: false
-        height: 0
-        color: Qt.rgba(1, 1, 1, 0.1)
-    }
+        visible: root.creatingTask
+        spacing: 8
 
-    // Поле ввода новой задачи
-    Item {
-        id: createSection
-        Layout.fillWidth: true
-        Layout.preferredHeight: sectionHeight
-        implicitHeight: sectionHeight
-        clip: true
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 40
+            radius: 8
+            color: taskInput.activeFocus ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
+            border.color: taskInput.activeFocus ? Theme.info : "transparent"
+            border.width: 1
 
-        property real fullHeight: createTaskForm.implicitHeight
-        property real sectionHeight: fullHeight * root.viewProgress
+            Behavior on border.color { ColorAnimation { duration: 150 } }
 
-        Behavior on sectionHeight {
-            NumberAnimation { duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultInOut }
+            TextInput {
+                id: taskInput
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                verticalAlignment: TextInput.AlignVCenter
+                color: Theme.textPrimary
+                font.family: Theme.fontPrimary
+                font.pixelSize: 14
+                clip: true
+                selectByMouse: true
+                activeFocusOnTab: true
+
+                Keys.onEscapePressed: root.closeCreateTask()
+                Keys.onReturnPressed: projectInput.forceActiveFocus()
+                Keys.onEnterPressed: projectInput.forceActiveFocus()
+
+                Text {
+                    anchors.fill: parent
+                    verticalAlignment: Text.AlignVCenter
+                    text: "Task description"
+                    color: Theme.textSecondary
+                    font: taskInput.font
+                    enabled: false
+                    visible: !taskInput.text && !taskInput.preeditText
+                }
+            }
         }
 
-        FocusScope {
-            id: createTaskScope
-            width: parent.width
-            height: createTaskForm.implicitHeight
-            focus: root.creatingTask
-            opacity: root.viewProgress
-            x: 24 * (1 - root.viewProgress)
-            scale: 0.97 + 0.03 * root.viewProgress
-            enabled: root.creatingTask
-            property real targetBlur: (1 - root.viewProgress) * 0.6
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 40
+            radius: 8
+            color: projectInput.activeFocus ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
+            border.color: projectInput.activeFocus ? Theme.info : "transparent"
+            border.width: 1
 
-            layer.enabled: targetBlur > 0
-            layer.effect: MultiEffect {
-                blurEnabled: true
-                blurMax: 150
-                blur: createTaskScope.targetBlur
+            Behavior on border.color { ColorAnimation { duration: 150 } }
+
+            TextInput {
+                id: projectInput
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                verticalAlignment: TextInput.AlignVCenter
+                color: Theme.textPrimary
+                font.family: Theme.fontPrimary
+                font.pixelSize: 14
+                clip: true
+                selectByMouse: true
+                activeFocusOnTab: true
+
+                Keys.onEscapePressed: root.closeCreateTask()
+                Keys.onReturnPressed: dueInput.forceActiveFocus()
+                Keys.onEnterPressed: dueInput.forceActiveFocus()
+
+                Text {
+                    anchors.fill: parent
+                    verticalAlignment: Text.AlignVCenter
+                    text: "Project (optional)"
+                    color: Theme.textSecondary
+                    font: projectInput.font
+                    enabled: false
+                    visible: !projectInput.text && !projectInput.preeditText
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 40
+            radius: 8
+            color: dueInput.activeFocus ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
+            border.color: dueInput.activeFocus ? Theme.info : "transparent"
+            border.width: 1
+
+            Behavior on border.color { ColorAnimation { duration: 150 } }
+
+            TextInput {
+                id: dueInput
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                verticalAlignment: TextInput.AlignVCenter
+                color: Theme.textPrimary
+                font.family: Theme.fontPrimary
+                font.pixelSize: 14
+                clip: true
+                selectByMouse: true
+                activeFocusOnTab: true
+
+                Keys.onEscapePressed: root.closeCreateTask()
+                Keys.onReturnPressed: root.submitTask()
+                Keys.onEnterPressed: root.submitTask()
+
+                Text {
+                    anchors.fill: parent
+                    verticalAlignment: Text.AlignVCenter
+                    text: "Deadline (optional, e.g. " + root.suggestedDueValue() + ")"
+                    color: Theme.textSecondary
+                    font: dueInput.font
+                    enabled: false
+                    visible: !dueInput.text && !dueInput.preeditText
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 44
+            radius: Theme.radiusPanel / 2
+            color: createTaskMouse.containsMouse ? Theme.bgHover : "transparent"
+            border.color: createTaskMouse.containsMouse ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.45) : "transparent"
+            border.width: 1
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: Theme.spacingDefault
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Create task"
+                color: createTaskMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                font.family: Theme.fontPrimary
+                font.pixelSize: 15
             }
 
-            ColumnLayout {
-                id: createTaskForm
-                width: parent.width
-                spacing: 8
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: 40
-                    radius: 8
-                    color: taskInput.activeFocus ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
-                    border.color: taskInput.activeFocus ? Theme.info : "transparent"
-                    border.width: 1
-
-                    Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                    TextInput {
-                        id: taskInput
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        verticalAlignment: TextInput.AlignVCenter
-                        color: Theme.textPrimary
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 14
-                        clip: true
-                        selectByMouse: true
-                        activeFocusOnTab: true
-
-                        Keys.onEscapePressed: root.closeCreateTask()
-                        Keys.onReturnPressed: projectInput.forceActiveFocus()
-                        Keys.onEnterPressed: projectInput.forceActiveFocus()
-
-                        Text {
-                            anchors.fill: parent
-                            verticalAlignment: Text.AlignVCenter
-                            text: "Task description"
-                            color: Theme.textSecondary
-                            font: taskInput.font
-                            enabled: false
-                            visible: !taskInput.text && !taskInput.preeditText
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: 40
-                    radius: 8
-                    color: projectInput.activeFocus ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.03)
-                    border.color: projectInput.activeFocus ? Theme.info : "transparent"
-                    border.width: 1
-
-                    Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                    TextInput {
-                        id: projectInput
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        verticalAlignment: TextInput.AlignVCenter
-                        color: Theme.textPrimary
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 14
-                        clip: true
-                        selectByMouse: true
-                        activeFocusOnTab: true
-
-                        Keys.onEscapePressed: root.closeCreateTask()
-                        Keys.onReturnPressed: root.submitTask()
-                        Keys.onEnterPressed: root.submitTask()
-
-                        Text {
-                            anchors.fill: parent
-                            verticalAlignment: Text.AlignVCenter
-                            text: "Project (optional)"
-                            color: Theme.textSecondary
-                            font: projectInput.font
-                            enabled: false
-                            visible: !projectInput.text && !projectInput.preeditText
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: 40
-                    radius: 8
-                    color: Qt.rgba(1, 1, 1, 0.03)
-                    border.color: root.dueEnabled ? Theme.info : "transparent"
-                    border.width: 1
-
-                    Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 8
-
-                        Text {
-                            text: "Deadline"
-                            color: Theme.textSecondary
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: root.formattedDueLabel()
-                            color: root.dueEnabled ? Theme.textPrimary : Theme.textSecondary
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 14
-                            elide: Text.ElideRight
-                        }
-
-                        Rectangle {
-                            visible: root.dueEnabled
-                            implicitWidth: clearDeadlineText.implicitWidth + Theme.spacingDefault * 2
-                            implicitHeight: 26
-                            radius: 13
-                            color: clearDeadlineMouse.containsMouse ? Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.2) : "transparent"
-
-                            Text {
-                                id: clearDeadlineText
-                                anchors.centerIn: parent
-                                text: "Clear"
-                                color: clearDeadlineMouse.containsMouse ? Theme.error : Theme.textSecondary
-                                font.family: Theme.fontPrimary
-                                font.pixelSize: 12
-                            }
-
-                            MouseArea {
-                                id: clearDeadlineMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.dueEnabled = false
-                            }
-                        }
-                    }
-                }
-
-                CalendarModule {
-                    id: dueCalendar
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 260
-                    onDaySelected: function(dateKey, hasEvents) {
-                        root.setDueFromDateKey(dateKey);
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    Text {
-                        text: "Time"
-                        color: Theme.textSecondary
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 13
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Rectangle {
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        radius: 8
-                        color: hourDownMouse.containsMouse ? Theme.bgHover : Qt.rgba(1, 1, 1, 0.03)
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "−"
-                            color: Theme.textPrimary
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 16
-                        }
-
-                        MouseArea {
-                            id: hourDownMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.adjustDueHour(-1)
-                        }
-                    }
-
-                    Rectangle {
-                        implicitWidth: 42
-                        implicitHeight: 32
-                        radius: 8
-                        color: Qt.rgba(1, 1, 1, 0.03)
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.pad(root.dueHour)
-                            color: Theme.textPrimary
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 14
-                        }
-                    }
-
-                    Rectangle {
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        radius: 8
-                        color: hourUpMouse.containsMouse ? Theme.bgHover : Qt.rgba(1, 1, 1, 0.03)
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "+"
-                            color: Theme.textPrimary
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 16
-                        }
-
-                        MouseArea {
-                            id: hourUpMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.adjustDueHour(1)
-                        }
-                    }
-
-                    Text {
-                        text: ":"
-                        color: Theme.textSecondary
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 16
-                    }
-
-                    Rectangle {
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        radius: 8
-                        color: minuteDownMouse.containsMouse ? Theme.bgHover : Qt.rgba(1, 1, 1, 0.03)
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "−"
-                            color: Theme.textPrimary
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 16
-                        }
-
-                        MouseArea {
-                            id: minuteDownMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.adjustDueMinute(-5)
-                        }
-                    }
-
-                    Rectangle {
-                        implicitWidth: 42
-                        implicitHeight: 32
-                        radius: 8
-                        color: Qt.rgba(1, 1, 1, 0.03)
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.pad(root.dueMinute)
-                            color: Theme.textPrimary
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 14
-                        }
-                    }
-
-                    Rectangle {
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        radius: 8
-                        color: minuteUpMouse.containsMouse ? Theme.bgHover : Qt.rgba(1, 1, 1, 0.03)
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "+"
-                            color: Theme.textPrimary
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 16
-                        }
-
-                        MouseArea {
-                            id: minuteUpMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.adjustDueMinute(5)
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: 44
-                    radius: Theme.radiusPanel / 2
-                    color: createTaskMouse.containsMouse ? Theme.bgHover : "transparent"
-                    border.color: createTaskMouse.containsMouse ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.45) : "transparent"
-                    border.width: 1
-
-                    Text {
-                        anchors.left: parent.left
-                        anchors.leftMargin: Theme.spacingDefault
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Create task"
-                        color: createTaskMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 15
-                    }
-
-                    MouseArea {
-                        id: createTaskMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.submitTask()
-                    }
-                }
+            MouseArea {
+                id: createTaskMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.submitTask()
             }
         }
     }
 
-    // Рекурсивный компонент для отрисовки дерева задач
     Component {
         id: treeNodeDelegate
         
@@ -760,18 +382,15 @@ PopoutWrapper {
             Layout.fillWidth: true
             spacing: 2
             
-            // Логика получения данных: либо из Repeater напрямую (modelData), либо из Loader (property myNodeData)
             property var nodeData: typeof myNodeData !== "undefined" ? myNodeData : modelData
             property bool projectCollapsed: nodeData && nodeData.type === "project" ? root.isProjectCollapsed(nodeData.fullProject) : false
             property int projectTaskCount: (nodeData && nodeData.type === "project") ? ((nodeData.taskCount !== undefined) ? nodeData.taskCount : root.collectProjectTaskUuids(nodeData).length) : 0
 
-            // ---- Если проект ----
             ColumnLayout {
                 visible: nodeData && nodeData.type === "project"
                 Layout.fillWidth: true
                 spacing: 2
 
-                // Заголовок проекта
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
@@ -841,7 +460,6 @@ PopoutWrapper {
                         border.width: 1
 
                         Text {
-                            id: deleteProjectText
                             anchors.centerIn: parent
                             text: root.safeIconFontFamily !== "" ? "󰆴" : ""
                             color: deleteProjectMouse.containsMouse ? Theme.error : Theme.textSecondary
@@ -861,17 +479,12 @@ PopoutWrapper {
                 
                 Item {
                     Layout.fillWidth: true
-                    implicitHeight: childrenRevealProgress * projectChildrenLayout.implicitHeight
+                    implicitHeight: elementRoot.projectCollapsed ? 0 : projectChildrenLayout.implicitHeight
                     clip: true
 
-                    property real childrenRevealProgress: elementRoot.projectCollapsed ? 0 : 1
-
-                    Behavior on childrenRevealProgress {
+                    Behavior on implicitHeight {
                         NumberAnimation { duration: AnimationConfig.durationVeryFast; easing.type: AnimationConfig.easingDefaultInOut }
                     }
-
-                    opacity: childrenRevealProgress
-                    enabled: childrenRevealProgress > 0
 
                     ColumnLayout {
                         id: projectChildrenLayout
@@ -893,18 +506,21 @@ PopoutWrapper {
                 }
             }
             
-            // ---- Если задача ----
             TodoItem {
                 visible: nodeData && nodeData.type === "task"
                 Layout.fillWidth: true
                 
-                taskId: (nodeData && nodeData.type === "task") ? nodeData.uuid : ""
-                taskText: (nodeData && nodeData.type === "task") ? nodeData.description : ""
+                description: (nodeData && nodeData.type === "task") ? nodeData.description : ""
+                uuid: (nodeData && nodeData.type === "task") ? nodeData.uuid : ""
+                isDue: (nodeData && nodeData.type === "task") ? (nodeData.due !== undefined) : false
+                urgency: (nodeData && nodeData.type === "task" && nodeData.urgency !== undefined) ? parseFloat(nodeData.urgency) : 0.0
                 isCompleted: (nodeData && nodeData.type === "task") ? (nodeData.status === "completed") : false
                 
-                // Прокидываем сигналы до TodoState
-                onToggled: function(taskUuid) {
+                onDoneClicked: function(taskUuid) {
                     TodoState.toggleTodo(taskUuid);
+                }
+                onDeleteClicked: function(taskUuid) {
+                    TodoState.deleteTodo(taskUuid);
                 }
             }
         }

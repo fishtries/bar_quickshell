@@ -1,21 +1,27 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
+
+import "../core"
 
 Rectangle {
     id: root
     
     // Входящие свойства
-    property string taskId: ""
-    property string taskText: ""
+    property string description: ""
+    property string uuid: ""
+    property bool isDue: false
+    property real urgency: 0.0
     property bool isCompleted: false
 
     // Сигналы
-    signal toggled(string id)
+    signal doneClicked(string taskUuid)
+    signal deleteClicked(string taskUuid)
 
     width: ListView.view ? ListView.view.width : (parent ? parent.width : 300)
-    implicitHeight: Math.max(44, rowLayout.implicitHeight + 12)
-    color: hoverArea.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-    radius: 10
+    implicitHeight: Math.max(44, rowLayout.implicitHeight + Theme.spacingDefault)
+    color: hoverArea.containsMouse ? Theme.bgHover : "transparent"
+    radius: Theme.radiusPanel / 2
     opacity: root.isCompleted ? 0.5 : 1.0
 
     // Изменение цвета фона при наведении на саму строку задач
@@ -30,11 +36,11 @@ Rectangle {
     RowLayout {
         id: rowLayout
         anchors.fill: parent
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        anchors.topMargin: 6
-        anchors.bottomMargin: 6
-        spacing: 10
+        anchors.leftMargin: Theme.spacingDefault
+        anchors.rightMargin: Theme.spacingDefault
+        anchors.topMargin: Theme.spacingSmall
+        anchors.bottomMargin: Theme.spacingSmall
+        spacing: Theme.spacingDefault
 
         // Левая часть: CheckBox для выполнения задачи
         Rectangle {
@@ -42,15 +48,15 @@ Rectangle {
             width: 20
             height: 20
             radius: 6
-            color: root.isCompleted ? Qt.rgba(0.25, 0.8, 0.45, 0.25) : (checkHoverArea.containsMouse ? Qt.rgba(0.25, 0.8, 0.45, 0.2) : "transparent")
-            border.color: root.isCompleted ? Qt.rgba(0.25, 0.8, 0.45, 1) : (checkHoverArea.containsMouse ? Qt.rgba(0.25, 0.8, 0.45, 1) : Qt.rgba(0.7, 0.7, 0.75, 1))
+            color: root.isCompleted ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.25) : (checkHoverArea.containsMouse ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.2) : "transparent")
+            border.color: root.isCompleted ? Theme.success : (checkHoverArea.containsMouse ? Theme.success : Theme.textSecondary)
             border.width: 2
             Layout.alignment: Qt.AlignVCenter
 
             Text {
                 anchors.centerIn: parent
                 text: "✓"
-                color: Qt.rgba(0.25, 0.8, 0.45, 1)
+                color: Theme.success
                 visible: root.isCompleted || checkHoverArea.containsMouse
                 font.pixelSize: 14
                 font.bold: true
@@ -61,19 +67,61 @@ Rectangle {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.toggled(root.taskId)
+                onClicked: root.doneClicked(root.uuid)
             }
         }
 
         // Центральная часть: текст задачи и индикатор срока
-        Text {
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
-            text: root.taskText
-            color: "#f4f4f5"
-            wrapMode: Text.Wrap
-            font.pixelSize: 15
-            font.strikeout: root.isCompleted
+            spacing: 2
+
+            AppText {
+                Layout.fillWidth: true
+                text: root.description
+                // Если isDue истинно, подсвечиваем текст красным, иначе стандартным
+                color: root.isDue ? Theme.error : Theme.textPrimary
+                font.family: Theme.fontPrimary
+                wrapMode: Text.Wrap
+                font.pixelSize: 15
+                font.strikeout: root.isCompleted
+            }
+            
+            // Если есть deadline, добавим маленький текстовый бейдж
+            AppText {
+                Layout.fillWidth: true
+                visible: root.isDue
+                text: "★ Deadline / Due"
+                color: Theme.error
+                font.pixelSize: 11
+                opacity: 0.8
+            }
+        }
+
+        // Правая часть: кнопка удаления (корзина)
+        Rectangle {
+            width: 28
+            height: 28
+            radius: width / 2
+            color: deleteHoverArea.containsMouse ? Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.2) : "transparent"
+            Layout.alignment: Qt.AlignVCenter
+            
+            Text {
+                anchors.centerIn: parent
+                text: "󰆴" // mdi-delete / trash icon в Nerd Font
+                color: deleteHoverArea.containsMouse ? Theme.error : Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g, Theme.textSecondary.b, 0.5)
+                font.family: Theme.fontIcon
+                font.pixelSize: 16
+            }
+
+            MouseArea {
+                id: deleteHoverArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.deleteClicked(root.uuid)
+            }
         }
     }
 }

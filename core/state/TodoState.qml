@@ -7,23 +7,67 @@ QtObject {
 
     property var todoModel: []
     property var _todos: []
-    property bool _writeQueued: false
-    property string _pendingWriteJson: ""
-    readonly property string _fileUri: "file:///home/fish/.config/quickshell/data/todos.json"
-    readonly property string _filePath: "/home/fish/.config/quickshell/data/todos.json"
-    readonly property string _writeScript: "import pathlib, sys\npath = pathlib.Path(sys.argv[1])\npath.parent.mkdir(parents=True, exist_ok=True)\npath.write_text(sys.argv[2], encoding='utf-8')\n"
+    property string _exportBuffer: ""
+    property bool _reloadQueued: false
+    property var _deleteQueue: []
+    readonly property string _taskDataLocation: "/home/fish/.task"
+    readonly property var _taskBaseCommand: ["task", "rc.data.location=" + root._taskDataLocation, "rc.confirmation=off"]
 
-    readonly property Process _writer: Process {
+    readonly property Timer _syncTimer: Timer {
+        interval: 60000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.reloadTodos()
+    }
+
+    readonly property Process _exportProcess: Process {
+        command: []
+        stdout: SplitParser {
+            onRead: data => {
+                root._exportBuffer += data + "\n";
+            }
+        }
+        onExited: function(exitCode, exitStatus) {
+            if (exitCode !== 0)
+                console.error("[TodoState] Failed to export Taskwarrior todos:", exitCode, exitStatus);
+            else
+                root._applyTaskExport(root._exportBuffer);
+
+            root._exportBuffer = "";
+
+            if (root._reloadQueued) {
+                root._reloadQueued = false;
+                root.reloadTodos();
+            }
+        }
+    }
+
+    readonly property Process _mutationProcess: Process {
         command: []
         onExited: function(exitCode, exitStatus) {
             if (exitCode !== 0)
-                console.error("[TodoState] Failed to write todos:", exitCode, exitStatus);
+                console.error("[TodoState] Failed to mutate Taskwarrior todos:", exitCode, exitStatus);
 
-            if (root._writeQueued) {
-                root._writeQueued = false;
-                root._runWrite();
+            if (root._deleteQueue && root._deleteQueue.length > 0) {
+                root._runNextDelete();
+                return;
             }
+
+            root.reloadTodos();
         }
+    }
+
+    function reloadTodos() {
+        if (root._exportProcess.running) {
+            root._reloadQueued = true;
+            return false;
+        }
+
+        root._exportBuffer = "";
+        root._exportProcess.command = root._taskBaseCommand.concat(["status:pending", "export"]);
+        root._exportProcess.running = true;
+        return true;
     }
 
     function addTodo(text, project, due) {
@@ -32,25 +76,21 @@ QtObject {
         if (description === "")
             return false;
 
-        let todo = {
-            uuid: root._createTodoId(),
-            description: description,
-            status: "pending",
-            createdAt: new Date().toISOString(),
-            urgency: 0.0
-        };
+        if (root._mutationProcess.running)
+            return false;
+
+        let args = ["add"];
         let cleanProject = project ? String(project).trim() : "";
         let cleanDue = due ? String(due).trim() : "";
 
-        if (cleanProject !== "")
-            todo.project = cleanProject;
-
         if (cleanDue !== "")
-            todo.due = cleanDue;
+            args.push("due:" + cleanDue);
 
-        root._todos = root._todos.concat([todo]);
-        root._syncModel();
-        root._persistTodos();
+        if (cleanProject !== "")
+            args.push("project:" + cleanProject);
+
+        args.push(description);
+        root._runTaskCommand(args);
         return true;
     }
 
@@ -60,33 +100,19 @@ QtObject {
         if (targetUuid === "")
             return false;
 
-        let changed = false;
-        let nextTodos = [];
-
-        for (let i = 0; i < root._todos.length; i++) {
-            let todo = root._cloneTodo(root._todos[i]);
-
-            if (todo.uuid === targetUuid) {
-                changed = true;
-
-                if (todo.status === "completed") {
-                    todo.status = "pending";
-                    delete todo.completedAt;
-                } else {
-                    todo.status = "completed";
-                    todo.completedAt = new Date().toISOString();
-                }
-            }
-
-            nextTodos.push(todo);
-        }
-
-        if (!changed)
+        if (root._mutationProcess.running)
             return false;
 
-        root._todos = nextTodos;
-        root._syncModel();
-        root._persistTodos();
+        let todo = root._findTodo(targetUuid);
+
+        if (!todo)
+            return false;
+
+        if (todo.status === "completed")
+            root._runTaskCommand([targetUuid, "modify", "status:pending", "end:"]);
+        else
+            root._runTaskCommand([targetUuid, "done"]);
+
         return true;
     }
 
@@ -96,24 +122,10 @@ QtObject {
         if (targetUuid === "")
             return false;
 
-        let changed = false;
-        let nextTodos = [];
-
-        for (let i = 0; i < root._todos.length; i++) {
-            if (root._todos[i].uuid === targetUuid) {
-                changed = true;
-                continue;
-            }
-
-            nextTodos.push(root._cloneTodo(root._todos[i]));
-        }
-
-        if (!changed)
+        if (root._mutationProcess.running)
             return false;
 
-        root._todos = nextTodos;
-        root._syncModel();
-        root._persistTodos();
+        root._runTaskCommand([targetUuid, "delete"]);
         return true;
     }
 
@@ -121,79 +133,60 @@ QtObject {
         if (!uuids || uuids.length === 0)
             return false;
 
+        if (root._mutationProcess.running)
+            return false;
+
         let deleteMap = {};
+        let uniqueUuids = [];
 
         for (let i = 0; i < uuids.length; i++) {
             let uuid = uuids[i] ? String(uuids[i]) : "";
 
-            if (uuid !== "")
+            if (uuid !== "" && !deleteMap[uuid]) {
                 deleteMap[uuid] = true;
-        }
-
-        let changed = false;
-        let nextTodos = [];
-
-        for (let j = 0; j < root._todos.length; j++) {
-            if (deleteMap[root._todos[j].uuid]) {
-                changed = true;
-                continue;
+                uniqueUuids.push(uuid);
             }
-
-            nextTodos.push(root._cloneTodo(root._todos[j]));
         }
 
-        if (!changed)
+        if (uniqueUuids.length === 0)
             return false;
 
-        root._todos = nextTodos;
-        root._syncModel();
-        root._persistTodos();
+        root._deleteQueue = uniqueUuids;
+        root._runNextDelete();
         return true;
     }
 
-    function _loadTodos() {
-        let xhr = new XMLHttpRequest();
-
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState !== XMLHttpRequest.DONE)
-                return;
-
-            if (xhr.status === 200 || xhr.status === 0) {
-                try {
-                    let responseText = xhr.responseText ? xhr.responseText.trim() : "";
-                    let payload = responseText.length > 0 ? JSON.parse(responseText) : [];
-                    root._todos = root._normalizeTodos(payload);
-                    root._syncModel();
-                } catch (e) {
-                    console.error("[TodoState] Failed to parse todos:", e);
-                    root._todos = [];
-                    root._syncModel();
-                }
-            }
-        };
-
-        xhr.open("GET", root._fileUri, true);
-        xhr.send();
+    function _runTaskCommand(args) {
+        root._mutationProcess.command = root._taskBaseCommand.concat(args);
+        root._mutationProcess.running = true;
     }
 
-    function _persistTodos() {
-        root._pendingWriteJson = JSON.stringify(root._todos, null, 2) + "\n";
-
-        if (root._writer.running) {
-            root._writeQueued = true;
+    function _runNextDelete() {
+        if (!root._deleteQueue || root._deleteQueue.length === 0) {
+            root.reloadTodos();
             return;
         }
 
-        root._runWrite();
+        let uuid = root._deleteQueue[0];
+        root._deleteQueue = root._deleteQueue.slice(1);
+        root._runTaskCommand([uuid, "delete"]);
     }
 
-    function _runWrite() {
-        root._writer.command = ["python", "-c", root._writeScript, root._filePath, root._pendingWriteJson];
-        root._writer.running = true;
+    function _applyTaskExport(exportText) {
+        try {
+            let responseText = exportText ? exportText.trim() : "";
+            let payload = responseText.length > 0 ? JSON.parse(responseText) : [];
+            root._todos = root._normalizeTodos(payload);
+            root._syncModel();
+        } catch (e) {
+            console.error("[TodoState] Failed to parse Taskwarrior export:", e);
+            root._todos = [];
+            root._syncModel();
+        }
     }
 
     function _normalizeTodos(payload) {
-        let source = Array.isArray(payload) ? payload : ((payload && Array.isArray(payload.todos)) ? payload.todos : []);
+        let source = Array.isArray(payload) ? payload : [];
         let normalized = [];
         let seen = {};
 
@@ -205,9 +198,6 @@ QtObject {
 
             let description = item.description !== undefined && item.description !== null ? String(item.description).trim() : "";
 
-            if (description === "" && item.text !== undefined && item.text !== null)
-                description = String(item.text).trim();
-
             if (description === "")
                 continue;
 
@@ -216,16 +206,17 @@ QtObject {
             if (uuid === "" && item.id !== undefined && item.id !== null)
                 uuid = String(item.id).trim();
 
-            while (uuid === "" || seen[uuid])
-                uuid = root._createTodoId();
+            if (uuid === "" || seen[uuid])
+                continue;
 
             seen[uuid] = true;
+            let status = item.status !== undefined && item.status !== null ? String(item.status) : "pending";
 
             let todo = {
                 uuid: uuid,
                 description: description,
-                status: item.status === "completed" || item.completed === true ? "completed" : "pending",
-                createdAt: item.createdAt ? String(item.createdAt) : new Date().toISOString(),
+                status: status === "completed" ? "completed" : "pending",
+                createdAt: item.entry ? String(item.entry) : new Date().toISOString(),
                 urgency: item.urgency !== undefined && !isNaN(parseFloat(item.urgency)) ? parseFloat(item.urgency) : 0.0
             };
             let project = item.project !== undefined && item.project !== null ? String(item.project).trim() : "";
@@ -237,8 +228,8 @@ QtObject {
             if (due !== "")
                 todo.due = due;
 
-            if (todo.status === "completed" && item.completedAt)
-                todo.completedAt = String(item.completedAt);
+            if (todo.status === "completed" && item.end)
+                todo.completedAt = String(item.end);
 
             normalized.push(todo);
         }
@@ -338,9 +329,12 @@ QtObject {
         return clone;
     }
 
-    function _createTodoId() {
-        return "todo-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 1000000000).toString(36);
-    }
+    function _findTodo(uuid) {
+        for (let i = 0; i < root._todos.length; i++) {
+            if (root._todos[i].uuid === uuid)
+                return root._todos[i];
+        }
 
-    Component.onCompleted: root._loadTodos()
+        return null;
+    }
 }
