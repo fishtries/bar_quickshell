@@ -22,7 +22,7 @@ PopoutWrapper {
     property int editingHour: 9
     property int editingMinute: 0
     property bool editingHasTime: true
-    property bool needsKeyboard: root.isOpen && root.editingReminder
+    property bool keyboardRequested: false
     readonly property int editLabelWidth: 42
 
     function formatDateHeading(dateStr) {
@@ -143,6 +143,18 @@ PopoutWrapper {
         editTitleInput.text = "";
     }
 
+    function syncKeyboardRequest() {
+        const shouldRequest = root.isOpen && root.editingReminder;
+        if (shouldRequest === root.keyboardRequested)
+            return;
+
+        root.keyboardRequested = shouldRequest;
+        if (shouldRequest)
+            FocusState.request();
+        else
+            FocusState.release();
+    }
+
     function submitEditReminder() {
         if (!root.editingReminderData || EventsState.reminderActionBusy)
             return;
@@ -170,6 +182,11 @@ PopoutWrapper {
     onIsOpenChanged: {
         if (!isOpen)
             root.closeEditReminder();
+        root.syncKeyboardRequest();
+    }
+
+    onEditingReminderChanged: {
+        root.syncKeyboardRequest();
     }
 
     Timer {
@@ -177,11 +194,16 @@ PopoutWrapper {
         interval: AnimationConfig.durationUltraFast
         repeat: false
         onTriggered: {
-            if (root.needsKeyboard) {
+            if (root.isOpen && root.editingReminder) {
                 editTitleInput.forceActiveFocus();
                 editTitleInput.cursorPosition = editTitleInput.text.length;
             }
         }
+    }
+
+    Component.onDestruction: {
+        if (root.keyboardRequested)
+            FocusState.release();
     }
      
     RowLayout {

@@ -13,7 +13,7 @@ PopoutWrapper {
     
     property bool creatingTask: false
     property real viewProgress: creatingTask ? 1 : 0
-    property bool needsKeyboard: root.isOpen && root.creatingTask
+    property bool keyboardRequested: false
     property var collapsedProjects: ({})
     property bool dueEnabled: false
     property var dueDate: new Date()
@@ -29,13 +29,6 @@ PopoutWrapper {
 
     Behavior on viewProgress {
         NumberAnimation { duration: AnimationConfig.durationQuick; easing.type: AnimationConfig.easingDefaultInOut }
-    }
-
-    onNeedsKeyboardChanged: {
-        if (needsKeyboard) {
-            createFocusTimer.stop();
-            createFocusTimer.start();
-        }
     }
 
     function pad(value) {
@@ -107,6 +100,21 @@ PopoutWrapper {
 
         taskInput.forceActiveFocus();
         taskInput.cursorPosition = taskInput.text.length;
+    }
+
+    function syncKeyboardRequest() {
+        const shouldRequest = root.isOpen && root.creatingTask;
+        if (shouldRequest === root.keyboardRequested)
+            return;
+
+        root.keyboardRequested = shouldRequest;
+        if (shouldRequest) {
+            FocusState.request();
+            createFocusTimer.stop();
+            createFocusTimer.start();
+        } else {
+            FocusState.release();
+        }
     }
 
     function syncCalendarToDueDate() {
@@ -220,6 +228,16 @@ PopoutWrapper {
             root.creatingTask = false;
             root.resetTaskForm();
         }
+        root.syncKeyboardRequest();
+    }
+
+    onCreatingTaskChanged: {
+        root.syncKeyboardRequest();
+    }
+
+    Component.onDestruction: {
+        if (root.keyboardRequested)
+            FocusState.release();
     }
 
     // Заголовок

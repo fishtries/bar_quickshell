@@ -18,12 +18,12 @@ Item {
     property bool notifInteracted: false
     property string replyText: ""
     property bool replyKeyboardRequested: false
+    property bool focusRequestActive: false
     property bool replyHovered: false
 
     property var displayedNotification: null
     property real notifBlur: 0.0
     readonly property bool replyVisible: notifExpanded && canReplyToNotification(displayedNotification)
-    readonly property bool needsKeyboard: replyVisible && replyKeyboardRequested
 
     readonly property bool isDragging: notifSwipe.isDragging
     readonly property real visualOffsetX: notifSwipe.visualOffsetX
@@ -64,6 +64,18 @@ Item {
 
     function pointerInsideIsland() {
         return islandMouseArea.containsMouse || replyHovered || replyKeyboardRequested
+    }
+
+    function syncFocusRequest() {
+        const shouldRequest = root.replyVisible && root.replyKeyboardRequested
+        if (shouldRequest === root.focusRequestActive)
+            return
+
+        root.focusRequestActive = shouldRequest
+        if (shouldRequest)
+            FocusState.request()
+        else
+            FocusState.release()
     }
 
     function collapseIfPointerOutside() {
@@ -148,6 +160,11 @@ Item {
     onReplyVisibleChanged: {
         if (!replyVisible)
             replyKeyboardRequested = false
+        root.syncFocusRequest()
+    }
+
+    onReplyKeyboardRequestedChanged: {
+        root.syncFocusRequest()
     }
 
     onCurrentNotificationChanged: {
@@ -162,6 +179,11 @@ Item {
             displayedNotification = currentNotification
             notifBlurPulse.start()
         }
+    }
+
+    Component.onDestruction: {
+        if (root.focusRequestActive)
+            FocusState.release()
     }
 
     SequentialAnimation {

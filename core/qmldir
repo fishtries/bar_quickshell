@@ -3,6 +3,7 @@ singleton MathState state/MathState.qml
 singleton NetworkState state/NetworkState.qml
 singleton VolumeState state/VolumeState.qml
 singleton TimeState state/TimeState.qml
+singleton FocusState state/FocusState.qml
 singleton WindowState state/WindowState.qml
 singleton EventsState state/EventsState.qml
 singleton NotificationState state/NotificationState.qml

@@ -13,7 +13,6 @@ Rectangle {
     property var currentNotification: null  // latest notification for the island
     readonly property bool notifExpanded: islandView.notifExpanded
     readonly property bool notifReplyVisible: islandView.replyVisible
-    readonly property bool needsKeyboard: islandView.needsKeyboard
 
     color: isNotifIsland ? "#000000" : Theme.localPanelForItem(root)
     radius: isNotifIsland ? (notifExpanded ? AnimationConfig.radiusCCNotifExpanded : AnimationConfig.radiusCCNotifCompact) : Theme.radiusPanel

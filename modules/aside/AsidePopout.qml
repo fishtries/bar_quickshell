@@ -9,7 +9,6 @@ import "." as Aside
 PopoutWrapper {
     id: root
 
-    property bool needsKeyboard: root.isOpen
     property string draft: ""
 
     popoutWidth: 460

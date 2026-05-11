@@ -11,6 +11,7 @@ Item {
     readonly property string clientScriptPath: "/home/fish/.config/quickshell/scripts/aside_bar_client.py"
 
     property bool inputRequested: false
+    property bool focusRequestActive: false
     property bool popoutOpen: false
     property bool bridgeReady: false
     property bool daemonAvailable: false
@@ -53,6 +54,17 @@ Item {
         inputRequested = false
         if (!isBusy)
             IslandState.hide()
+    }
+
+    function syncFocusRequest() {
+        if (inputRequested === focusRequestActive)
+            return
+
+        focusRequestActive = inputRequested
+        if (focusRequestActive)
+            FocusState.request()
+        else
+            FocusState.release()
     }
 
     function shortModel(value) {
@@ -335,6 +347,10 @@ Item {
         NumberAnimation { duration: 110; easing.type: Easing.OutQuad }
     }
 
+    onInputRequestedChanged: {
+        syncFocusRequest()
+    }
+
     Process {
         id: bridgeProcess
         command: ["python3", root.bridgeScriptPath]
@@ -409,6 +425,8 @@ Item {
 
     Component.onDestruction: {
         bridgeRestartTimer.stop()
+        if (focusRequestActive)
+            FocusState.release()
         if (bridgeProcess.running)
             bridgeProcess.running = false
     }

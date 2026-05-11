@@ -8,8 +8,6 @@ Item {
     implicitWidth: 32
     implicitHeight: 32
 
-    property bool needsKeyboard: Aside.AsideState.inputRequested
-
     function toggleIsland() {
         if (IslandState.isAside && Aside.AsideState.inputRequested) {
             Aside.AsideState.closeIsland()
