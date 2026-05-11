@@ -192,11 +192,7 @@ PanelWindow {
         anchors.right: parent.right
         anchors.rightMargin: 20
         visible: !ccModule.popoutOpen && ccModule.isNotifIsland
-        y: {
-            if (!ccModule.isNotifIsland) return layoutContainer.height + 8
-            var islandBottom = layoutContainer.y + rightGroup.y + ccModule.parent.y + ccModule.y + ccModule.implicitHeight
-            return islandBottom + 8
-        }
+        y: LayoutState.controlCenterBottomEdge + 8
         Behavior on y { NumberAnimation { duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingDefaultOut } }
 
         readonly property int bottomFadeHeight: 260

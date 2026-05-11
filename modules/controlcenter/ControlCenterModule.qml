@@ -14,6 +14,10 @@ Rectangle {
     readonly property bool notifExpanded: islandView.notifExpanded
     readonly property bool notifReplyVisible: islandView.replyVisible
 
+    function reportBottomEdge() {
+        LayoutState.controlCenterBottomEdge = mapToItem(null, 0, height).y
+    }
+
     color: isNotifIsland ? "#000000" : Theme.localPanelForItem(root)
     radius: isNotifIsland ? (notifExpanded ? AnimationConfig.radiusCCNotifExpanded : AnimationConfig.radiusCCNotifCompact) : Theme.radiusPanel
 
@@ -24,6 +28,9 @@ Rectangle {
     implicitHeight: isNotifIsland ? (notifExpanded ? expandedIslandHeight : compactIslandHeight) : (networkIcons.height + 4)
     x: islandView.visualOffsetX
     y: (isNotifIsland ? (notifExpanded ? 38 : 18) : 0) + islandView.visualOffsetY
+    onHeightChanged: reportBottomEdge()
+    onYChanged: reportBottomEdge()
+    Component.onCompleted: reportBottomEdge()
 
     // Blur spike on island transition
     property real animBlur: 0.0
