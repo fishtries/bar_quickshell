@@ -91,7 +91,7 @@ PopoutWrapper {
         if (uuids.length === 0)
             return;
 
-        TodoState.deleteTasks(uuids);
+        TodoState.deleteTodos(uuids);
     }
 
     function focusTaskInput() {
@@ -177,7 +177,7 @@ PopoutWrapper {
         return root.dueEnabled ? Qt.formatDate(root.dueDate, "d MMM yyyy") + " · " + root.pad(root.dueHour) + ":" + root.pad(root.dueMinute) : "No deadline";
     }
 
-    function dueTaskwarriorValue() {
+    function dueValue() {
         return root.dueEnabled ? Qt.formatDate(root.dueDate, "yyyy-MM-dd") + "T" + root.pad(root.dueHour) + ":" + root.pad(root.dueMinute) : "";
     }
 
@@ -206,7 +206,7 @@ PopoutWrapper {
         if (description === "")
             return;
 
-        TodoState.addTask(description, projectInput.text, root.dueTaskwarriorValue());
+        TodoState.addTodo(description, projectInput.text, root.dueValue());
         root.closeCreateTask();
     }
 
@@ -222,7 +222,6 @@ PopoutWrapper {
         if (isOpen) {
             root.creatingTask = false;
             root.resetTaskForm();
-            TodoState.reloadTasks();
         } else {
             createFocusTimer.stop();
             root.creatingTask = false;
@@ -337,13 +336,13 @@ PopoutWrapper {
                 
                 // Генерация узлов дерева (либо проект, либо задача из корня)
                 Repeater {
-                    model: TodoState.tasks
+                    model: TodoState.todoModel
                     delegate: treeNodeDelegate
                 }
                 
                 // Если задач нет
                 Item {
-                    visible: TodoState.tasks.length === 0
+                    visible: TodoState.todoModel.length === 0
                     Layout.fillWidth: true
                     implicitHeight: 80
                     
@@ -899,18 +898,13 @@ PopoutWrapper {
                 visible: nodeData && nodeData.type === "task"
                 Layout.fillWidth: true
                 
-                description: (nodeData && nodeData.type === "task") ? nodeData.description : ""
-                uuid: (nodeData && nodeData.type === "task") ? nodeData.uuid : ""
-                isDue: (nodeData && nodeData.type === "task") ? (nodeData.due !== undefined) : false
-                urgency: (nodeData && nodeData.type === "task" && nodeData.urgency !== undefined) ? parseFloat(nodeData.urgency) : 0.0
+                taskId: (nodeData && nodeData.type === "task") ? nodeData.uuid : ""
+                taskText: (nodeData && nodeData.type === "task") ? nodeData.description : ""
                 isCompleted: (nodeData && nodeData.type === "task") ? (nodeData.status === "completed") : false
                 
                 // Прокидываем сигналы до TodoState
-                onDoneClicked: function(taskUuid) {
-                    TodoState.completeTask(taskUuid);
-                }
-                onDeleteClicked: function(taskUuid) {
-                    TodoState.deleteTask(taskUuid);
+                onToggled: function(taskUuid) {
+                    TodoState.toggleTodo(taskUuid);
                 }
             }
         }
