@@ -19,7 +19,6 @@ PopoutWrapper {
     property bool dueEnabled: false
     property bool dueTimeEnabled: false
     property var dueDate: new Date()
-
     readonly property string safePrimaryFontFamily: Theme.fontPrimary ? String(Theme.fontPrimary) : ""
     readonly property string safeIconFontFamily: Theme.fontIcon ? String(Theme.fontIcon) : ""
 
@@ -35,8 +34,6 @@ PopoutWrapper {
         NumberAnimation { target: root; property: "bubbleScale"; to: 1.0; duration: 1000; easing.type: Easing.OutElastic; easing.period: 0.4; easing.amplitude: 0.9 }
     }
 
-
-
     onCreatingTaskChanged: {
         if (root.isOpen) {
             bubbleAnim.restart();
@@ -46,8 +43,6 @@ PopoutWrapper {
     Behavior on viewProgress {
         NumberAnimation { duration: 350; easing.type: Easing.OutQuint }
     }
-
-
 
     function pad(value) {
         return value < 10 ? "0" + value : "" + value;
@@ -227,7 +222,6 @@ PopoutWrapper {
     ColumnLayout {
         Layout.fillWidth: true
         spacing: Theme.spacingDefault
-
     Item {
         id: pageContainer
         Layout.fillWidth: true
@@ -241,7 +235,7 @@ PopoutWrapper {
         Item {
             id: listPage
             width: parent.width
-            implicitHeight: listPageLayout.implicitHeight
+            implicitHeight: Math.min(500, Math.max(80, taskListLayout.implicitHeight))
             height: implicitHeight
 
             property real targetOpacity: root.creatingTask ? 0.0 : 1.0
@@ -250,7 +244,12 @@ PopoutWrapper {
             opacity: targetOpacity
             enabled: opacity > 0
 
-            Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
+            Behavior on opacity {
+                SequentialAnimation {
+                    PauseAnimation { duration: 150 }
+                    NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
+                }
+            }
             Behavior on targetBlur { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
 
             layer.enabled: targetBlur > 0
@@ -260,31 +259,10 @@ PopoutWrapper {
                 blur: listPage.targetBlur
             }
 
-            ColumnLayout {
-                id: listPageLayout
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: Theme.spacingDefault
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: "Tasks"
-                        color: Theme.textPrimary
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-                }
-
-                ScrollView {
-                    id: scrollView
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(500, Math.max(80, taskListLayout.implicitHeight))
-                    clip: true
+            ScrollView {
+                id: scrollView
+                anchors.fill: parent
+                clip: true
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                 ColumnLayout {
@@ -340,12 +318,13 @@ PopoutWrapper {
                 }
             }
         }
-        } // Close listPageLayout
+            }
+        }
 
         Item {
             id: createPage
             width: parent.width
-            implicitHeight: createPageLayout.implicitHeight
+            implicitHeight: createTaskForm.implicitHeight
             height: implicitHeight
 
             property real targetOpacity: root.creatingTask ? 1.0 : 0.0
@@ -354,7 +333,12 @@ PopoutWrapper {
             opacity: targetOpacity
             enabled: opacity > 0
 
-            Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
+            Behavior on opacity {
+                SequentialAnimation {
+                    PauseAnimation { duration: 150 }
+                    NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
+                }
+            }
             Behavior on targetBlur { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
 
             layer.enabled: targetBlur > 0
@@ -365,53 +349,9 @@ PopoutWrapper {
             }
 
             ColumnLayout {
-                id: createPageLayout
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: Theme.spacingDefault
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    Rectangle {
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        radius: 14
-                        color: backMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "←"
-                            color: backMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 18
-                        }
-
-                        MouseArea {
-                            id: backMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.closeCreateTask()
-                        }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: "New task"
-                        color: Theme.textPrimary
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-                }
-
-                ColumnLayout {
-                    id: createTaskForm
-                    Layout.fillWidth: true
-                    spacing: 8
+                id: createTaskForm
+                width: parent.width
+                spacing: 8
 
                 Rectangle {
                     Layout.fillWidth: true
@@ -846,13 +786,12 @@ PopoutWrapper {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.submitTask()
                     }
-                } // closes Rectangle
-            } // closes createTaskForm
-        } // closes createPageLayout
-    } // closes createPage
-    } // closes pageContainer
-    } // closes Main ColumnLayout
+                }
+            }
+        }
+    }
 
+    }
 
     Component {
         id: treeNodeDelegate

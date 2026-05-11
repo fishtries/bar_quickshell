@@ -65,7 +65,7 @@ QtObject {
         }
 
         root._exportBuffer = "";
-        root._exportProcess.command = root._taskBaseCommand.concat(["status:pending", "export"]);
+        root._exportProcess.command = root._taskBaseCommand.concat(["status:pending", "or", "status:completed", "export"]);
         root._exportProcess.running = true;
         return true;
     }
