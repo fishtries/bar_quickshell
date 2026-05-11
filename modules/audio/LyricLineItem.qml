@@ -9,7 +9,7 @@ Text {
     property bool isActive: false
     property bool isRevealed: false
     property real visualOpacity: 1.0
-    property real visualScale: isActive ? 1.0 : 0.96
+    property real visualScale: 1.0
     property real blurAmount: isActive ? 0.0 : 0.12
     property real slideOffset: isRevealed ? 0 : 40
     property real revealOpacity: isRevealed ? 1.0 : 0.0
@@ -37,10 +37,6 @@ Text {
 
     Behavior on color {
         ColorAnimation { duration: 300 }
-    }
-
-    Behavior on scale {
-        NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
     }
 
     HoverHandler {

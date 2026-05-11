@@ -158,7 +158,7 @@ ColumnLayout {
                 isActive: lyricContainer.isActive
                 isRevealed: lyricContainer.revealed
                 visualOpacity: lyricContainer.viewY < lyricContainer.focalPoint ? Math.max(0.15, 1.0 - lyricContainer.normalizedDist * 2.15) : Math.max(0.0, 1.0 - lyricContainer.bottomFade * lyricContainer.bottomFade)
-                visualScale: Math.max(0.92, 1.0 - lyricContainer.normalizedDist * 0.08)
+                visualScale: 1.0
                 blurAmount: Math.min(1.0, lyricContainer.normalizedDist * (lyricContainer.viewY < lyricContainer.focalPoint ? 7.5 : 1.5))
             }
         }
