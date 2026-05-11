@@ -13,6 +13,7 @@ Item {
     id: root
 
     signal newNotification(var notification)
+    signal activeNotificationListChanged(var notifications)
     signal specialTelegramMessageReceived()
 
     // ─── Presented notification tracking ───────────────────────────────
@@ -48,6 +49,17 @@ Item {
             root.specialTelegramMessageReceived()
     }
 
+    function activeNotificationValues() {
+        var model = activeNotifications
+        var items = model && model.values ? model.values : []
+        var result = []
+
+        for (var i = 0; i < items.length; i++)
+            result.push(items[i])
+
+        return result
+    }
+
     function markPresented(notif) {
         if (notif && !isPresented(notif))
             presentedNotifs = presentedNotifs.concat(notif)
@@ -73,9 +85,7 @@ Item {
     }
 
     function syncNotificationRefs() {
-        var items = activeNotifications.values
-        if (!items)
-            items = []
+        var items = activeNotificationValues()
 
         var cleanedPresented = []
         for (var i = 0; i < presentedNotifs.length; i++) {
@@ -104,6 +114,8 @@ Item {
             stackNotifications = cleanedStack
             stackRevision += 1
         }
+
+        activeNotificationListChanged(items)
     }
 
     function pushStackNotification(notif) {
@@ -183,6 +195,17 @@ Item {
             notification.tracked = true;
             root.syncNotificationRefs()
             root.newNotification(notification);
+        }
+    }
+
+    Connections {
+        target: notifications.trackedNotifications
+        ignoreUnknownSignals: true
+        function onValuesChanged() {
+            root.syncNotificationRefs()
+        }
+        function onCountChanged() {
+            root.syncNotificationRefs()
         }
     }
 

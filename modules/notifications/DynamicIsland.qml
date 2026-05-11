@@ -11,25 +11,14 @@ PanelWindow {
 
     signal requestControlCenter()
 
-    property var currentNotification: null
-    property int previousCount: 0
-    property bool expanded: false
-
-    readonly property bool hasNotification: currentNotification !== null
-
-    // Store the latest notification directly from the signal
-    // (UntypedObjectModel doesn't support .get())
-    Connections {
-        target: NotificationState
-        function onNewNotification(notification) {
-            root.currentNotification = notification;
-            if (root.previousCount === 0) {
-                root.previousCount = 1;
-            }
-            root.refreshCurrentNotification(true);
-        }
+    IslandController {
+        id: controller
+        onRequestControlCenter: root.requestControlCenter()
     }
-    readonly property string visualState: !hasNotification ? "hidden" : expanded ? "expanded" : "compact"
+
+    readonly property bool hasNotification: controller.hasNotification
+    readonly property bool expanded: controller.isExpanded
+    readonly property string visualState: controller.visualState
     readonly property int topOffset: 8
     readonly property int compactWidth: 160
     readonly property int compactHeight: 36
@@ -39,9 +28,10 @@ PanelWindow {
     readonly property int horizontalPadding: 14
     readonly property int verticalPadding: 10
     readonly property int detailSpacing: 8
-    readonly property string appLabel: currentNotification && currentNotification.appName ? currentNotification.appName : "Notification"
-    readonly property string summaryLabel: currentNotification && currentNotification.summary ? currentNotification.summary : appLabel
-    readonly property string bodyLabel: currentNotification && currentNotification.body ? currentNotification.body : ""
+    readonly property string iconText: controller.iconText
+    readonly property string appLabel: controller.appLabel
+    readonly property string summaryLabel: controller.summaryLabel
+    readonly property string bodyLabel: controller.bodyLabel
     readonly property real expandedBubbleHeight: Math.max(90, headerRow.implicitHeight + detailColumn.implicitHeight + detailSpacing + (verticalPadding * 2))
     readonly property real targetBubbleWidth: visualState === "hidden" ? 0 : visualState === "expanded" ? expandedWidth : compactWidth
     readonly property real targetBubbleHeight: visualState === "hidden" ? 0 : visualState === "expanded" ? expandedBubbleHeight : compactHeight
@@ -56,82 +46,6 @@ PanelWindow {
     WlrLayershell.exclusiveZone: -1
     WlrLayershell.namespace: "qs-dynamic-island"
     implicitHeight: bubble.height > 0 ? bubble.height + topOffset : 0
-
-    function restartAutoHide() {
-        autoHideTimer.stop();
-        if (hasNotification && !interactionArea.containsMouse) {
-            autoHideTimer.start();
-        }
-    }
-
-    function refreshCurrentNotification(isNewArrival) {
-        if (!hasNotification) {
-            expanded = false;
-            expandTimer.stop();
-            autoHideTimer.stop();
-            return;
-        }
-
-        if (isNewArrival) {
-            expanded = false;
-        }
-
-        if (interactionArea.containsMouse) {
-            autoHideTimer.stop();
-            if (!expanded) {
-                expandTimer.restart();
-            }
-        } else {
-            expandTimer.stop();
-            restartAutoHide();
-        }
-    }
-
-    ListView {
-        id: notificationTracker
-        visible: false
-        width: 0
-        height: 0
-        model: NotificationState.activeNotifications
-        delegate: Item {}
-
-        onCountChanged: {
-            const isNewArrival = count > root.previousCount;
-            root.previousCount = count;
-            if (count === 0) {
-                root.currentNotification = null;
-            }
-            root.refreshCurrentNotification(isNewArrival);
-        }
-    }
-
-    Component.onCompleted: {
-        previousCount = notificationTracker.count;
-        refreshCurrentNotification(false);
-    }
-
-    Timer {
-        id: expandTimer
-        interval: AnimationConfig.timerIslandExpand
-        repeat: false
-        onTriggered: {
-            if (root.visualState === "compact") {
-                root.expanded = true;
-                expandTimer.stop();
-            }
-        }
-    }
-
-    Timer {
-        id: autoHideTimer
-        interval: AnimationConfig.timerIslandAutoHide
-        repeat: false
-        onTriggered: {
-            if (root.currentNotification) {
-                root.currentNotification.dismiss();
-            }
-        }
-    }
 
     mask: Region {
         item: bubbleWrapper
@@ -205,32 +119,15 @@ PanelWindow {
                 cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 
                 onEntered: {
-                    autoHideTimer.stop();
-                    if (!root.expanded && root.hasNotification) {
-                        expandTimer.restart();
-                    }
+                    controller.handleHover(true);
                 }
 
                 onExited: {
-                    expandTimer.stop();
-                    root.restartAutoHide();
+                    controller.handleHover(false);
                 }
 
                 onClicked: {
-                    if (!root.currentNotification) {
-                        return;
-                    }
-
-                    if (root.visualState === "compact") {
-                        root.requestControlCenter();
-                        root.currentNotification.dismiss();
-                        return;
-                    }
-
-                    if (root.visualState === "expanded") {
-                        root.currentNotification.invokeDefaultAction();
-                        root.currentNotification.dismiss();
-                    }
+                    controller.handleClick();
                 }
             }
 
@@ -245,7 +142,7 @@ PanelWindow {
                     spacing: 10
 
                     AppIcon {
-                        text: "\uf0f3"
+                        text: root.iconText
                         font.pixelSize: root.expanded ? 18 : 16
                         color: Theme.info
                         Layout.alignment: Qt.AlignVCenter
