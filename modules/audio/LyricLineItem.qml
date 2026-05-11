@@ -8,13 +8,16 @@ Text {
     property string lineText: ""
     property bool isActive: false
     property bool isRevealed: false
+    property real visualOpacity: 1.0
+    property real visualScale: isActive ? 1.0 : 0.96
+    property real blurAmount: isActive ? 0.0 : 0.12
     property real slideOffset: isRevealed ? 0 : 40
     property real revealOpacity: isRevealed ? 1.0 : 0.0
 
     text: lineText
     color: isActive ? Theme.textPrimary : (lyricHover.hovered ? Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.88) : Qt.rgba(Theme.textPrimary.r, Theme.textPrimary.g, Theme.textPrimary.b, 0.6))
-    opacity: revealOpacity
-    scale: isActive ? 1.0 : 0.96
+    opacity: revealOpacity * visualOpacity
+    scale: visualScale
     transform: Translate { y: root.slideOffset }
     transformOrigin: Item.Left
     wrapMode: Text.WordWrap
@@ -46,8 +49,8 @@ Text {
 
     layer.enabled: true
     layer.effect: MultiEffect {
-        blurEnabled: !root.isActive
+        blurEnabled: !root.isActive && root.blurAmount > 0
         blurMax: 24
-        blur: root.isActive ? 0.0 : 0.12
+        blur: root.blurAmount
     }
 }

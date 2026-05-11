@@ -205,39 +205,16 @@ PopoutWrapper {
         }
 
         // ─── ПРАВАЯ ЧАСТЬ: Текст песен (Lyrics) ──────────────────────────
-        ColumnLayout {
-            opacity: (lyricsCtrl.lyricsModel && lyricsCtrl.lyricsModel.count > 0) ? 1.0 : 0.0
-            visible: opacity > 0
-            Behavior on opacity { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
-            
+        LyricsPanel {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 12
+            controller: lyricsCtrl
 
-            ListView {
-                id: mediaLyrics
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
-                clip: true
-                spacing: 16
-                highlightMoveDuration: 600
-                highlightMoveVelocity: -1
-                currentIndex: lyricsCtrl.currentLyricIndex
-                highlightRangeMode: ListView.StrictlyEnforceRange
-                preferredHighlightBegin: height * 0.25
-                preferredHighlightEnd: height * 0.25
-
-                model: lyricsCtrl.lyricsModel
-
-                delegate: LyricLineItem {
-                    x: 20
-                    width: ListView.view.width - 40
-                    lineText: model.line
-                    isActive: index === lyricsCtrl.currentLyricIndex
-                    isRevealed: index < lyricsCtrl.revealedCount
-                }
+            onSeekRequested: (time, index) => {
+                seekProc.command = ["playerctl", "-p", root.mediaPlayer || "spotify,firefox,%any", "position", String(time)];
+                seekProc.running = true;
+                root.mediaPosition = time;
+                lyricsCtrl.seekToIndex(index, time);
             }
         }
     }
