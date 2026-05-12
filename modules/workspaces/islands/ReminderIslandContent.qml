@@ -24,6 +24,17 @@ Item {
     readonly property int requestedHeight: root.showCustomReminderPicker ? 440 : 136
     readonly property int requestedRadius: 26
 
+    onIsIslandChanged: {
+        if (!root.isIsland) {
+            root.showCustomReminderPicker = false
+            root.displayCustomReminderPicker = false
+            root.displayReminderIsland = root.isReminderIsland
+            root.pendingIslandContentChange = null
+            root.islandContentBlur = 0.0
+            root.islandContentOpacity = 1.0
+        }
+    }
+
     onIsReminderIslandChanged: {
         if (!root.isIsland) {
             root.displayReminderIsland = root.isReminderIsland

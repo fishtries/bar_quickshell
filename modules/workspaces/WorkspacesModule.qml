@@ -57,14 +57,6 @@ Rectangle {
     property real animBlur: 0.0
     onIsIslandChanged: {
         blurPulse.restart()
-        if (!root.isIsland) {
-            reminderModule.showCustomReminderPicker = false
-            reminderModule.displayCustomReminderPicker = false
-            reminderModule.displayReminderIsland = root.isReminderIsland
-            reminderModule.pendingIslandContentChange = null
-            reminderModule.islandContentBlur = 0.0
-            reminderModule.islandContentOpacity = 1.0
-        }
     }
 
     SequentialAnimation {
