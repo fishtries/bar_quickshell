@@ -457,13 +457,14 @@ Item {
 
                 CalendarModule {
                     id: customReminderCalendar
+                    independent: true
                     anchors.fill: parent
                     anchors.margins: 12
                     onDaySelected: function(dateKey, hasEvents) {
                         root.setCustomReminderDateFromKey(dateKey)
                     }
-                    onViewMonthChanged: IslandState.restart()
-                    onViewYearChanged: IslandState.restart()
+                    on_ViewMonthChanged: IslandState.restart()
+                    on_ViewYearChanged: IslandState.restart()
                     Component.onCompleted: root.syncCustomReminderCalendar(true)
                 }
             }

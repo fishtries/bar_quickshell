@@ -6,7 +6,7 @@ Row {
     id: root
 
     property bool isNotifIsland: false
-    property string displayBtStatus: NetworkState.btStatus
+    property string displayBtStatus: BluetoothState.btStatus
 
     signal popoutToggleRequested()
 
@@ -23,7 +23,7 @@ Row {
     Binding {
         target: root
         property: "displayBtStatus"
-        value: NetworkState.btStatus
+        value: BluetoothState.btStatus
         when: !btCrossfade.running
     }
 
@@ -53,8 +53,8 @@ Row {
         }
         ScriptAction {
             script: {
-                root.displayBtStatus = NetworkState.pendingBtStatus
-                NetworkState.btStatus = NetworkState.pendingBtStatus
+                root.displayBtStatus = BluetoothState.pendingBtStatus
+                BluetoothState.commitBtUpdate()
             }
         }
         ParallelAnimation {
@@ -68,6 +68,10 @@ Row {
         function onWifiUpdateTriggered() {
             wifiCrossfade.restart()
         }
+    }
+
+    Connections {
+        target: BluetoothState
         function onBtUpdateTriggered() {
             btCrossfade.restart()
         }

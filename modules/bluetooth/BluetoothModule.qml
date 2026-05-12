@@ -1,8 +1,7 @@
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
-import Quickshell.Io
 import QtQuick.Effects
+import "../../core"
 
 Item {
     id: root
@@ -11,8 +10,6 @@ Item {
     implicitWidth: iconRect.width
     implicitHeight: iconRect.height
     
-    property string pendingStatus: "off"
-    property string status: "off"
     property bool popoutOpen: false
     property Item popoutItem: popout
     
@@ -22,38 +19,24 @@ Item {
             NumberAnimation { target: btIcon; property: "opacity"; to: 0.0; duration: 200 }
             NumberAnimation { target: btIcon; property: "blurValue"; to: 1.0; duration: 200; easing.type: Easing.InQuad }
         }
-        ScriptAction { script: root.status = root.pendingStatus }
+        ScriptAction { script: BluetoothState.commitBtUpdate() }
         ParallelAnimation {
             NumberAnimation { target: btIcon; property: "opacity"; to: 1.0; duration: 200 }
             NumberAnimation { target: btIcon; property: "blurValue"; to: 0.0; duration: 400; easing.type: Easing.OutQuad }
         }
     }
-    
-    // Process для выполнения команд оболочки и считывания результата
-    Process {
-        id: btPoller
-        command: ["sh", "-c", "if rfkill list bluetooth | grep -q 'Soft blocked: yes'; then echo 'off'; elif [ -n \"$(bluetoothctl devices Connected)\" ]; then echo 'connected'; else echo 'on'; fi"]
-        
-        stdout: SplitParser {
-            onRead: data => {
-                let res = data.trim()
-                if (res === "off" || res === "on" || res === "connected") {
-                    if (res !== root.status && res !== root.pendingStatus) {
-                        root.pendingStatus = res;
-                        crossfadeAnim.restart();
-                    }
-                }
-            }
+
+    Connections {
+        target: BluetoothState
+        function onBtUpdateTriggered() {
+            crossfadeAnim.restart();
         }
     }
 
-    // Таймер, который обновляет статус каждые 2 секунды
-    Timer {
-        interval: 2000
-        running: true
-        repeat: true
-        onTriggered: btPoller.running = true
-        Component.onCompleted: btPoller.running = true
+    Binding {
+        target: BluetoothState
+        property: "popoutOpen"
+        value: root.popoutOpen
     }
     
     // Сама иконка-островок (фон убран, иконка стала прозрачной)
@@ -71,7 +54,7 @@ Item {
             property real blurValue: 0.0
             
             text: {
-                switch(root.status) {
+                switch(BluetoothState.btStatus) {
                     case "connected": return "\udb80\udcaf";
                     case "on":        return "\udb80\udcaf?";
                     case "off":       return "\udb80\udcb2";
@@ -80,7 +63,7 @@ Item {
                 }
             }
             
-            color: (root.status === "on" || root.status === "connected") ? "#000000" : "#555555"
+            color: (BluetoothState.btStatus === "on" || BluetoothState.btStatus === "connected") ? "#000000" : "#555555"
             font { pixelSize: 18; bold: true }
             
             Behavior on color { ColorAnimation { duration: 300 } }
@@ -110,7 +93,6 @@ Item {
     BluetoothPopout {
         id: popout
         isOpen: root.popoutOpen
-        btStatus: root.status
         
         onCloseRequested: root.popoutOpen = false
         

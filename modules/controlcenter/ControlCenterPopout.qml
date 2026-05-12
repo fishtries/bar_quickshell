@@ -54,7 +54,7 @@ PopoutWrapper {
     onCurrentPageChanged: {
         if (isOpen) bubbleAnim.restart();
         if (currentPage === "wifi") wifiCCPoller.running = true;
-        if (currentPage === "bluetooth") btCCPoller.running = true;
+        if (currentPage === "bluetooth") BluetoothState.refreshDeviceList();
         if (currentPage === "math") MathState.refresh();
     }
 
@@ -135,7 +135,7 @@ PopoutWrapper {
                             icon: root.btStatus === "off" ? "\udb80\udcb2" : "\udb80\udcaf"
                             label: "Bluetooth"
                             isActive: root.btStatus === "on" || root.btStatus === "connected"
-                            onClicked: NetworkState.toggleBluetooth()
+                            onClicked: BluetoothState.togglePower()
                             onRightClicked: root.currentPage = "bluetooth"
                         }
 
@@ -550,7 +550,7 @@ PopoutWrapper {
                     implicitHeight: btConnCol.implicitHeight + 16
                     radius: 10
                     color: Theme.bgSubtle
-                    visible: btConnectedModel.count > 0
+                    visible: BluetoothState.connectedDevices.count > 0
 
                     ColumnLayout {
                         id: btConnCol
@@ -567,7 +567,7 @@ PopoutWrapper {
                         }
 
                         Repeater {
-                            model: btConnectedModel
+                            model: BluetoothState.connectedDevices
 
                             Rectangle {
                                 id: btConnRect
@@ -578,7 +578,7 @@ PopoutWrapper {
                                 clip: true
 
                                 required property var modelData
-                                property bool isPending: btPendingMac === modelData.mac
+                                property bool isPending: BluetoothState.pendingMac === modelData.mac
 
                                 Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -624,10 +624,7 @@ PopoutWrapper {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        btPendingMac = modelData.mac
-                                        Hyprland.dispatch("exec bluetoothctl disconnect " + modelData.mac)
-                                    }
+                                    onClicked: BluetoothState.disconnectDevice(modelData.mac)
                                 }
                             }
                         }
@@ -640,7 +637,7 @@ PopoutWrapper {
                     implicitHeight: btPairedCol.implicitHeight + 16
                     radius: 10
                     color: Theme.bgSubtle
-                    visible: btPairedModel.count > 0
+                    visible: BluetoothState.pairedDevices.count > 0
 
                     ColumnLayout {
                         id: btPairedCol
@@ -657,7 +654,7 @@ PopoutWrapper {
                         }
 
                         Repeater {
-                            model: btPairedModel
+                            model: BluetoothState.pairedDevices
 
                             Rectangle {
                                 id: btPairedRect
@@ -668,7 +665,7 @@ PopoutWrapper {
                                 clip: true
 
                                 required property var modelData
-                                property bool isPending: btPendingMac === modelData.mac
+                                property bool isPending: BluetoothState.pendingMac === modelData.mac
 
                                 Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -720,10 +717,7 @@ PopoutWrapper {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        btPendingMac = modelData.mac
-                                        Hyprland.dispatch("exec bluetoothctl connect " + modelData.mac)
-                                    }
+                                    onClicked: BluetoothState.connectDevice(modelData.mac)
                                 }
                             }
                         }
@@ -751,7 +745,7 @@ PopoutWrapper {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            Hyprland.dispatch("exec blueman-manager")
+                            BluetoothState.openManager();
                             root.closeRequested()
                         }
                     }
@@ -842,63 +836,14 @@ PopoutWrapper {
         onTriggered: wifiCCPoller.running = true
     }
 
-
-    // =====================================================================
-    //  POLLING: Bluetooth
-    // =====================================================================
-    property string btPendingMac: ""
-    ListModel { id: btConnectedModel }
-    ListModel { id: btPairedModel }
-
-    Process {
-        id: btCCPoller
-        command: ["sh", "-c", "echo '==CONNECTED=='; bluetoothctl devices Connected; echo '==PAIRED=='; bluetoothctl devices Paired"]
-
-        stdout: SplitParser {
-            property string currentMode: "none"
-            property var tempConnected: []
-            property var tempPaired: []
-
-            onRead: data => {
-                let line = data.trim();
-                if (line === "==CONNECTED==") { currentMode = "connected"; tempConnected = []; return; }
-                if (line === "==PAIRED==") { currentMode = "paired"; tempPaired = []; return; }
-                if (line.length > 0 && line.startsWith("Device")) {
-                    let parts = line.split(" ");
-                    if (parts.length >= 3) {
-                        let mac = parts[1];
-                        let name = parts.slice(2).join(" ");
-                        if (currentMode === "connected") {
-                            tempConnected.push({ mac: mac, name: name });
-                        } else if (currentMode === "paired") {
-                            if (!tempConnected.some(d => d.mac === mac)) {
-                                tempPaired.push({ mac: mac, name: name });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        onExited: {
-            const parser = stdout as SplitParser;
-            btConnectedModel.clear();
-            for (let item of parser.tempConnected) btConnectedModel.append(item);
-            btPairedModel.clear();
-            for (let item of parser.tempPaired) btPairedModel.append(item);
-            btPendingMac = "";
-        }
-    }
-
-    Timer {
-        interval: 3000
-        running: root.isOpen && root.currentPage === "bluetooth"
-        repeat: true
-        onTriggered: btCCPoller.running = true
-    }
-
     // =====================================================================
     //  POLLING: Night Light + Math Mode processes
+
+    Binding {
+        target: BluetoothState
+        property: "popoutOpen"
+        value: root.isOpen && root.currentPage === "bluetooth"
+    }
     // =====================================================================
     Timer {
         id: mathConfirmTimer

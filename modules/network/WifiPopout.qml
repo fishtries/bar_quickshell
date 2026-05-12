@@ -1,19 +1,12 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Hyprland
-import Quickshell.Io
 import "../../components"
+import "../../core"
 
 PopoutWrapper {
     id: root
     
-    property bool isConnected: false
-    property string essid: ""
-    property int signalStrength: 0
-    
-    // MAC-адрес/название устройства, к которому идёт подключение/отключение
-    property string pendingId: ""
     property bool showAvailableWF: false
     
     Text {
@@ -33,13 +26,13 @@ PopoutWrapper {
                     Layout.fillWidth: true
                     
                     Text {
-                        text: root.isConnected ? "\udb82\udd28" : "\udb82\udd2b"
-                        color: root.isConnected ? "#ffffff" : "#717171"
+                        text: NetworkState.wifiConnected ? "\udb82\udd28" : "\udb82\udd2b"
+                        color: NetworkState.wifiConnected ? "#ffffff" : "#717171"
                         font { pixelSize: 20; bold: true }
                     }
                     
                     Text {
-                        text: root.isConnected ? `Connected to ${root.essid}` : "Disconnected"
+                        text: NetworkState.wifiConnected ? `Connected to ${NetworkState.wifiEssid}` : "Disconnected"
                         color: "#e0e0e0"
                         font.pixelSize: 14
                         Layout.fillWidth: true
@@ -48,7 +41,7 @@ PopoutWrapper {
 
                     // Кнопка отключения
                     Rectangle {
-                        visible: root.isConnected
+                        visible: NetworkState.wifiConnected
                         implicitWidth: 70
                         implicitHeight: 26
                         radius: 13
@@ -71,10 +64,7 @@ PopoutWrapper {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.pendingId = root.essid;
-                                Hyprland.dispatch(`exec nmcli connection down id "${root.essid}"`)
-                            }
+                            onClicked: NetworkState.disconnectFromNetwork(NetworkState.wifiEssid)
                         }
                     }
                 }
@@ -85,7 +75,7 @@ PopoutWrapper {
                     implicitHeight: connectedCol.implicitHeight + 16
                     radius: 10
                     color: Qt.rgba(1, 1, 1, 0.03)
-                    visible: currentConnModel.count > 0
+                    visible: NetworkState.currentConnections.count > 0
                     
                     ColumnLayout {
                         id: connectedCol
@@ -102,7 +92,7 @@ PopoutWrapper {
                         }
                         
                         Repeater {
-                            model: currentConnModel
+                            model: NetworkState.currentConnections
                             
                             Rectangle {
                                 id: currWifiRect
@@ -113,7 +103,7 @@ PopoutWrapper {
                                 clip: true
                                 
                                 required property var modelData
-                                property bool isPending: root.pendingId === modelData.ssid
+                                property bool isPending: NetworkState.pendingId === modelData.ssid
                                 
                                 Behavior on color { ColorAnimation { duration: 150 } }
                                 
@@ -164,10 +154,7 @@ PopoutWrapper {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.pendingId = modelData.ssid;
-                                        Hyprland.dispatch(`exec nmcli connection down id "${modelData.ssid}"`)
-                                    }
+                                    onClicked: NetworkState.disconnectFromNetwork(modelData.ssid)
                                 }
                             }
                         }
@@ -180,7 +167,7 @@ PopoutWrapper {
                     implicitHeight: availWfCol.implicitHeight + 16
                     radius: 10
                     color: Qt.rgba(1, 1, 1, 0.03)
-                    visible: availWfModel.count > 0
+                    visible: NetworkState.availableNetworks.count > 0
                     
                     ColumnLayout {
                         id: availWfCol
@@ -236,7 +223,7 @@ PopoutWrapper {
                                 spacing: 6
                                 
                                 Repeater {
-                                    model: availWfModel
+                                    model: NetworkState.availableNetworks
                                     
                                     Rectangle {
                                         id: availWifiRect
@@ -247,7 +234,7 @@ PopoutWrapper {
                                         clip: true
                                         
                                         required property var modelData
-                                        property bool isPending: root.pendingId === modelData.ssid
+                                        property bool isPending: NetworkState.pendingId === modelData.ssid
                                         
                                         Behavior on color { ColorAnimation { duration: 150 } }
                                         
@@ -300,10 +287,7 @@ PopoutWrapper {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                root.pendingId = modelData.ssid;
-                                                Hyprland.dispatch(`exec nmcli device wifi connect "${modelData.ssid}"`)
-                                            }
+                                            onClicked: NetworkState.connectToNetwork(modelData.ssid)
                                         }
                                     }
                                 }
@@ -311,86 +295,4 @@ PopoutWrapper {
                         }
                     }
                 }
-                
-
-                
-
-    
-    ListModel { id: currentConnModel }
-    ListModel { id: availWfModel }
-    
-    Process {
-        id: networkPoller
-        command: ["sh", "-c", "nmcli -t -f active,ssid,signal dev wifi"]
-        
-        stdout: SplitParser {
-            property var tempCurrWifi: []
-            property var tempAvailWifi: []
-            property var seenSsid: []
-            
-            onRead: data => {
-                let line = data.trim();
-                if (line.length === 0) return;
-                
-                let firstColon = line.indexOf(':');
-                if (firstColon !== -1) {
-                    let activeStr = line.substring(0, firstColon);
-                    let rest = line.substring(firstColon + 1);
-                    let lastColon = rest.lastIndexOf(':');
-                    if (lastColon !== -1) {
-                        let ssid = rest.substring(0, lastColon);
-                        let signal = rest.substring(lastColon + 1);
-                        
-                        // Пропускаем пустые SSID и дубликаты
-                        if (ssid.length > 0 && ssid !== "--" && !seenSsid.includes(ssid)) {
-                            seenSsid.push(ssid);
-                            if (activeStr === "yes") {
-                                tempCurrWifi.push({ ssid: ssid, signal: signal });
-                            } else {
-                                // Ограничиваем список 8 сетями
-                                if (tempAvailWifi.length < 8) {
-                                    tempAvailWifi.push({ ssid: ssid, signal: signal });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        onExited: {
-            const parser = stdout as SplitParser;
-            
-            currentConnModel.clear();
-            for (let item of parser.tempCurrWifi) currentConnModel.append(item);
-            
-            availWfModel.clear();
-            for (let item of parser.tempAvailWifi) availWfModel.append(item);
-            
-            parser.tempCurrWifi = [];
-            parser.tempAvailWifi = [];
-            parser.seenSsid = [];
-            
-            if (root.pendingId !== "") {
-                let stillPending = false;
-                // Just rudimentary check to see if we can drop pending state
-                root.pendingId = "";
-            }
-        }
-    }
-    
-    Timer {
-        interval: 3000
-        running: root.isOpen
-        repeat: true
-        onTriggered: {
-            networkPoller.running = true;
-        }
-    }
-    
-    onIsOpenChanged: {
-        if (isOpen) {
-            networkPoller.running = true;
-        }
-    }
 }

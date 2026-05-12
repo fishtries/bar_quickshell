@@ -497,6 +497,7 @@ PopoutWrapper {
 
                     CalendarModule {
                         id: dueCalendar
+                        independent: true
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: 260
                         opacity: root.dueEnabled ? 1 : 0

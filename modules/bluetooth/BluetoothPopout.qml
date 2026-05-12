@@ -1,19 +1,13 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Hyprland
-import Quickshell.Io
 import QtQuick.Effects
 
 import "../../components"
+import "../../core"
 
 PopoutWrapper {
     id: root
-
-    property string btStatus: "off"
-    
-    // MAC-адрес устройства, к которому идёт подключение/отключение
-    property string pendingMac: ""
 
     // Заголовок
     Text {
@@ -36,19 +30,19 @@ PopoutWrapper {
                     
                     Text {
                         text: {
-                            switch(root.btStatus) {
+                            switch(BluetoothState.btStatus) {
                                 case "connected": return "\udb80\udcaf";
                                 case "on":        return "\udb80\udcaf"; 
                                 default:          return "\udb80\udcb2";
                             }
                         }
-                        color: (root.btStatus === "on" || root.btStatus === "connected") ? "#ffffff" : "#717171"
+                        color: (BluetoothState.btStatus === "on" || BluetoothState.btStatus === "connected") ? "#ffffff" : "#717171"
                         font { pixelSize: 20; bold: true }
                     }
                     
                     Text {
                         text: {
-                            switch(root.btStatus) {
+                            switch(BluetoothState.btStatus) {
                                 case "connected": return "Connected";
                                 case "on":        return "No connection";
                                 case "off":       return "Bluetooth Off";
@@ -66,7 +60,7 @@ PopoutWrapper {
                     implicitHeight: connectedDevicesColumn.implicitHeight + 16
                     radius: 10
                     color: Qt.rgba(1, 1, 1, 0.03)
-                    visible: connectedModel.count > 0
+                    visible: BluetoothState.connectedDevices.count > 0
                     
                     ColumnLayout {
                         id: connectedDevicesColumn
@@ -83,7 +77,7 @@ PopoutWrapper {
                         }
                         
                         Repeater {
-                            model: connectedModel
+                            model: BluetoothState.connectedDevices
                             
                             Rectangle {
                                 id: connectedDeviceRect
@@ -94,7 +88,7 @@ PopoutWrapper {
                                 clip: true
                                 
                                 required property var modelData
-                                property bool isPending: root.pendingMac === modelData.mac
+                                property bool isPending: BluetoothState.pendingMac === modelData.mac
                                 
                                 Behavior on color { ColorAnimation { duration: 150 } }
                                 
@@ -146,10 +140,7 @@ PopoutWrapper {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.pendingMac = modelData.mac;
-                                        Hyprland.dispatch("exec bluetoothctl disconnect " + modelData.mac)
-                                    }
+                                    onClicked: BluetoothState.disconnectDevice(modelData.mac)
                                 }
                             }
                         }
@@ -162,7 +153,7 @@ PopoutWrapper {
                     implicitHeight: pairedDevicesColumn.implicitHeight + 16
                     radius: 10
                     color: Qt.rgba(1, 1, 1, 0.03)
-                    visible: pairedModel.count > 0
+                    visible: BluetoothState.pairedDevices.count > 0
                     
                     ColumnLayout {
                         id: pairedDevicesColumn
@@ -179,7 +170,7 @@ PopoutWrapper {
                         }
                         
                         Repeater {
-                            model: pairedModel
+                            model: BluetoothState.pairedDevices
                             
                             Rectangle {
                                 id: pairedDeviceRect
@@ -190,7 +181,7 @@ PopoutWrapper {
                                 clip: true
                                 
                                 required property var modelData
-                                property bool isPending: root.pendingMac === modelData.mac
+                                property bool isPending: BluetoothState.pendingMac === modelData.mac
                                 
                                 Behavior on color { ColorAnimation { duration: 150 } }
                                 
@@ -244,10 +235,7 @@ PopoutWrapper {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.pendingMac = modelData.mac;
-                                        Hyprland.dispatch("exec bluetoothctl connect " + modelData.mac)
-                                    }
+                                    onClicked: BluetoothState.connectDevice(modelData.mac)
                                 }
                             }
                         }
@@ -282,97 +270,9 @@ PopoutWrapper {
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: {
-                            Hyprland.dispatch("exec blueman-manager")
+                            BluetoothState.openManager();
                             root.closeRequested();
                         }
                     }
                 }
-
-    
-    // Процесс для получения списка устройств
-    ListModel { id: connectedModel }
-    ListModel { id: pairedModel }
-    
-    Process {
-        id: devicePoller
-        command: ["sh", "-c", "echo '==CONNECTED=='; bluetoothctl devices Connected; echo '==PAIRED=='; bluetoothctl devices Paired"]
-        
-        stdout: SplitParser {
-            property string currentMode: "none"
-            property var tempConnected: []
-            property var tempPaired: []
-            
-            onRead: data => {
-                let line = data.trim();
-                if (line === "==CONNECTED==") { 
-                    currentMode = "connected"; 
-                    tempConnected = []; 
-                    return; 
-                }
-                if (line === "==PAIRED==") { 
-                    currentMode = "paired"; 
-                    tempPaired = []; 
-                    return; 
-                }
-                
-                if (line.length > 0 && line.startsWith("Device")) {
-                    let parts = line.split(" ");
-                    if (parts.length >= 3) {
-                        let mac = parts[1];
-                        let name = parts.slice(2).join(" ");
-                        
-                        if (currentMode === "connected") {
-                            tempConnected.push({ mac: mac, name: name });
-                        } else if (currentMode === "paired") {
-                            let isConnected = tempConnected.some(d => d.mac === mac);
-                            if (!isConnected) {
-                                  tempPaired.push({ mac: mac, name: name });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        onExited: {
-            const parser = stdout as SplitParser;
-            
-            // Атомарно обновляем модели, чтобы избежать "прыжков" высоты
-            connectedModel.clear();
-            for (let item of parser.tempConnected) connectedModel.append(item);
-            
-            pairedModel.clear();
-            for (let item of parser.tempPaired) pairedModel.append(item);
-            
-            // Если устройство перешло из одного списка в другой — сбросить shimmer
-            if (root.pendingMac !== "") {
-                let stillExists = false;
-                for (let i = 0; i < pairedModel.count; i++) {
-                    if (pairedModel.get(i).mac === root.pendingMac) { stillExists = true; break; }
-                }
-                if (!stillExists) {
-                    for (let i = 0; i < connectedModel.count; i++) {
-                        if (connectedModel.get(i).mac === root.pendingMac) { stillExists = true; break; }
-                    }
-                }
-                // Устройство поменяло категорию — операция завершена
-                root.pendingMac = "";
-            }
-        }
-    }
-    
-    Timer {
-        interval: 3000
-        running: root.isOpen
-        repeat: true
-        onTriggered: {
-            devicePoller.running = true;
-        }
-    }
-    
-    onIsOpenChanged: {
-        if (isOpen) {
-            devicePoller.running = true;
-        }
-    }
 }

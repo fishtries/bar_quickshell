@@ -69,13 +69,10 @@ PopoutWrapper {
         if (!dateObj)
             return;
 
-        calendar.selectedDay = dateObj.getDate();
-        calendar.selectedMonth = dateObj.getMonth() + 1;
-        calendar.selectedYear = dateObj.getFullYear();
-
         if (forceView) {
-            calendar.viewMonth = calendar.selectedMonth;
-            calendar.viewYear = calendar.selectedYear;
+            TimeState.gotoDateAndView(dateObj.getDate(), dateObj.getMonth() + 1, dateObj.getFullYear());
+        } else {
+            TimeState.gotoDate(dateObj.getDate(), dateObj.getMonth() + 1, dateObj.getFullYear());
         }
     }
 

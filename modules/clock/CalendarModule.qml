@@ -5,25 +5,54 @@ import "../../core"
 
 Item {
     id: root
-    
+
     implicitWidth: 260
     implicitHeight: 280
     signal daySelected(string dateKey, bool hasEvents)
-    
-    // Внутреннее состояние выбранного месяца/года (по умолчанию текущие)
-    property int viewMonth: TimeState.month
-    property int viewYear: TimeState.year
-    
-    // Выбранная дата для показа событий
-    property int selectedDay: TimeState.day
-    property int selectedMonth: TimeState.month
-    property int selectedYear: TimeState.year
-    readonly property string selectedDateKey: EventsState.dateKey(root.selectedDay, root.selectedMonth, root.selectedYear)
-    
-    // Названия месяцев (в QML лучше брать через Qt.formatDate)
-    function getMonthName(m, y) {
-        let d = new Date(y, m - 1, 1);
-        return Qt.formatDate(d, "MMMM yyyy");
+
+    // When independent is true, this instance manages its own local state
+    // instead of binding to the TimeState singleton. Used by TodoPopout,
+    // ReminderIslandContent, etc. which need a separate calendar view.
+    property bool independent: false
+
+    // ─── Local state (used when independent) ─────────────────────────
+    property int _viewMonth: TimeState.month
+    property int _viewYear: TimeState.year
+    property int _selectedDay: TimeState.day
+    property int _selectedMonth: TimeState.month
+    property int _selectedYear: TimeState.year
+
+    // Public aliases for external access (TodoPopout, ReminderIslandContent)
+    property alias selectedDay: root._selectedDay
+    property alias selectedMonth: root._selectedMonth
+    property alias selectedYear: root._selectedYear
+    property alias viewMonth: root._viewMonth
+    property alias viewYear: root._viewYear
+
+    // Effective state (delegates to TimeState or local)
+    readonly property int effViewMonth: independent ? _viewMonth : TimeState.viewMonth
+    readonly property int effViewYear: independent ? _viewYear : TimeState.viewYear
+    readonly property int effSelectedDay: independent ? _selectedDay : TimeState.selectedDay
+    readonly property int effSelectedMonth: independent ? _selectedMonth : TimeState.selectedMonth
+    readonly property int effSelectedYear: independent ? _selectedYear : TimeState.selectedYear
+
+    readonly property string selectedDateKey: EventsState.dateKey(root.effSelectedDay, root.effSelectedMonth, root.effSelectedYear)
+
+    // ─── Independent mode: local model ──────────────────────────────
+    ListModel { id: localModel }
+
+    function _rebuildLocalModel() {
+        if (!root.independent) return;
+        let result = TimeState.generateCalendarArray(root._viewMonth, root._viewYear);
+        localModel.clear();
+        for (let item of result) localModel.append(item);
+    }
+
+    on_ViewMonthChanged: root._rebuildLocalModel()
+    on_ViewYearChanged: root._rebuildLocalModel()
+
+    onIndependentChanged: {
+        if (root.independent) root._rebuildLocalModel();
     }
 
     ColumnLayout {
@@ -33,9 +62,9 @@ Item {
         // ─── Header: Month & Navigation ──────────────────────────────
         RowLayout {
             Layout.fillWidth: true
-            
+
             AppText {
-                text: getMonthName(root.viewMonth, root.viewYear)
+                text: TimeState.getMonthName(root.effViewMonth, root.effViewYear)
                 Layout.fillWidth: true
                 font { pixelSize: 16; weight: Font.Bold }
                 color: Theme.textPrimary
@@ -44,13 +73,13 @@ Item {
 
             Row {
                 spacing: 4
-                
+
                 // Кнопка назад
                 Item {
                     width: 28; height: 28
-                    AppText { 
-                        text: "󰁍" 
-                        anchors.centerIn: parent 
+                    AppText {
+                        text: "󰁍"
+                        anchors.centerIn: parent
                         font.pixelSize: 18
                         color: prevMouse.hovered ? Theme.info : Theme.textSecondary
                     }
@@ -58,11 +87,15 @@ Item {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            if (root.viewMonth === 1) {
-                                root.viewMonth = 12;
-                                root.viewYear--;
+                            if (root.independent) {
+                                if (root._viewMonth === 1) {
+                                    root._viewMonth = 12;
+                                    root._viewYear--;
+                                } else {
+                                    root._viewMonth--;
+                                }
                             } else {
-                                root.viewMonth--;
+                                TimeState.prevMonth();
                             }
                         }
                     }
@@ -71,9 +104,9 @@ Item {
                 // Кнопка вперед
                 Item {
                     width: 28; height: 28
-                    AppText { 
-                        text: "󰁔" 
-                        anchors.centerIn: parent 
+                    AppText {
+                        text: "󰁔"
+                        anchors.centerIn: parent
                         font.pixelSize: 18
                         color: nextMouse.hovered ? Theme.info : Theme.textSecondary
                     }
@@ -81,11 +114,15 @@ Item {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            if (root.viewMonth === 12) {
-                                root.viewMonth = 1;
-                                root.viewYear++;
+                            if (root.independent) {
+                                if (root._viewMonth === 12) {
+                                    root._viewMonth = 1;
+                                    root._viewYear++;
+                                } else {
+                                    root._viewMonth++;
+                                }
                             } else {
-                                root.viewMonth++;
+                                TimeState.nextMonth();
                             }
                         }
                     }
@@ -98,7 +135,7 @@ Item {
             columns: 7
             spacing: 0
             Layout.fillWidth: true
-            
+
             Repeater {
                 model: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
                 delegate: AppText {
@@ -119,32 +156,32 @@ Item {
             spacing: 0
             Layout.fillWidth: true
             Layout.fillHeight: true
-            
+
             Repeater {
-                model: generateCalendar(root.viewMonth, root.viewYear)
-                
+                model: root.independent ? localModel : TimeState.calendarDaysModel
+
                 delegate: Item {
                     width: root.implicitWidth / 7
                     height: 36
-                    
-                    readonly property bool isToday: modelData.day === TimeState.day && 
-                                                  modelData.month === TimeState.month && 
-                                                  modelData.year === TimeState.year
-                    
-                    readonly property bool isSelected: modelData.day === root.selectedDay &&
-                                                     modelData.month === root.selectedMonth &&
-                                                     modelData.year === root.selectedYear
-                    
-                    readonly property bool isCurrentMonth: modelData.month === root.viewMonth
-                    readonly property bool hasEvents: EventsState.hasEventsForDate(modelData.day, modelData.month, modelData.year)
-                    
-                    
+
+                    readonly property bool isToday: model.day === TimeState.day &&
+                                                  model.month === TimeState.month &&
+                                                  model.year === TimeState.year
+
+                    readonly property bool isSelected: model.day === root.effSelectedDay &&
+                                                     model.month === root.effSelectedMonth &&
+                                                     model.year === root.effSelectedYear
+
+                    readonly property bool isCurrentMonth: model.month === root.effViewMonth
+                    readonly property bool hasEvents: EventsState.hasEventsForDate(model.day, model.month, model.year)
+
+
                     // Фон (подсветка выбранного дня / сегодняшнего)
                     Rectangle {
                         anchors.centerIn: parent
                         width: 32; height: 32
                         radius: 8
-                        
+
                         color: {
                             if (isSelected && isToday) return Theme.info;
                             if (isSelected) return Theme.bgActive;
@@ -152,22 +189,22 @@ Item {
                             if (dayHover.hovered) return Theme.bgHover;
                             return "transparent";
                         }
-                        
+
                         // Если выбран не сегодняшний день, добавляем границу
                         border.width: (isSelected && !isToday) ? 1 : 0
                         border.color: Theme.textSecondary
-                        
+
                         Behavior on color { ColorAnimation { duration: 150 } }
                     }
 
                     AppText {
                         anchors.centerIn: parent
-                        text: modelData.day
+                        text: model.day
                         color: (isToday && isSelected) ? "#000000" : (isCurrentMonth ? Theme.textPrimary : Theme.textSecondary)
                         opacity: isCurrentMonth ? 1.0 : 0.3
-                        font { 
+                        font {
                             pixelSize: 13
-                            weight: isToday ? Font.Bold : Font.Normal 
+                            weight: isToday ? Font.Bold : Font.Normal
                         }
                     }
 
@@ -185,21 +222,30 @@ Item {
 
 
                     HoverHandler { id: dayHover }
-                    
+
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            root.selectedDay = modelData.day;
-                            root.selectedMonth = modelData.month;
-                            root.selectedYear = modelData.year;
-                            let dateKey = EventsState.dateKey(modelData.day, modelData.month, modelData.year);
+                            if (root.independent) {
+                                root._selectedDay = model.day;
+                                root._selectedMonth = model.month;
+                                root._selectedYear = model.year;
+                            } else {
+                                TimeState.gotoDate(model.day, model.month, model.year);
+                            }
+
+                            let dateKey = EventsState.dateKey(model.day, model.month, model.year);
                             root.daySelected(dateKey, EventsState.hasEventsForKey(dateKey));
-                            
-                            
+
                             // Если кликнули на день из другого месяца, перелистываем туда
-                            if (modelData.month !== root.viewMonth) {
-                                root.viewMonth = modelData.month;
-                                root.viewYear = modelData.year;
+                            if (model.month !== root.effViewMonth) {
+                                if (root.independent) {
+                                    root._viewMonth = model.month;
+                                    root._viewYear = model.year;
+                                } else {
+                                    TimeState.viewMonth = model.month;
+                                    TimeState.viewYear = model.year;
+                                }
                             }
                         }
                     }
@@ -208,46 +254,7 @@ Item {
         }
     }
 
-    // ─── Calendar Logic ────────────────────────────────────────────
-    function generateCalendar(month, year) {
-        let result = [];
-        
-        let firstDay = new Date(year, month - 1, 1);
-        let lastDay = new Date(year, month, 0);
-        
-        // В JS getDay() 0 - воскресенье. Переводим в 1 - понедельник
-        let startWs = firstDay.getDay(); 
-        if (startWs === 0) startWs = 7; 
-        
-        // Добавляем дни предыдущего месяца
-        let prevMonthLastDay = new Date(year, month - 1, 0);
-        for (let i = startWs - 1; i > 0; i--) {
-            result.push({
-                day: prevMonthLastDay.getDate() - i + 1,
-                month: month === 1 ? 12 : month - 1,
-                year: month === 1 ? year - 1 : year,
-            });
-        }
-        
-        // Дни текущего месяца
-        for (let i = 1; i <= lastDay.getDate(); i++) {
-            result.push({
-                day: i,
-                month: month,
-                year: year,
-            });
-        }
-        
-        // Добавляем дни следующего месяца до заполнения сетки (42 ячейки)
-        let nextDays = 42 - result.length;
-        for (let i = 1; i <= nextDays; i++) {
-            result.push({
-                day: i,
-                month: month === 12 ? 1 : month + 1,
-                year: month === 12 ? year + 1 : year,
-            });
-        }
-        
-        return result;
+    Component.onCompleted: {
+        if (root.independent) root._rebuildLocalModel();
     }
 }
