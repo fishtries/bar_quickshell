@@ -19,7 +19,7 @@ Rectangle {
     readonly property bool isAsideIsland: IslandState.isAside
     
     color: isIsland ? "#000000" : Theme.localPanelForItem(root)
-    radius: isIsland ? (isReminderIsland ? reminderModule.requestedRadius : (isAsideIsland ? asideModule.requestedRadius : (isLocalSendIsland ? localSendModule.requestedRadius : 18))) : Theme.radiusPanel
+    radius: getTargetRadius()
     border.width: 0
     border.color: "transparent"
     z: isIsland ? 100 : 0
@@ -27,6 +27,32 @@ Rectangle {
     readonly property real launcherAnchorX: width
     readonly property real launcherAnchorY: height * 0.5 + workspaceShift.y
     
+    // Active island module resolver
+    function getActiveModule() {
+        if (root.isReminderIsland) return reminderModule
+        if (root.isAsideIsland) return asideModule
+        if (root.isLocalSendIsland) return localSendModule
+        return null
+    }
+
+    function getTargetWidth() {
+        if (!root.isIsland) return layout.implicitWidth + 12
+        let mod = root.getActiveModule()
+        return mod ? mod.requestedWidth : 600
+    }
+
+    function getTargetHeight() {
+        if (!root.isIsland) return layout.implicitHeight + 14
+        let mod = root.getActiveModule()
+        return mod ? mod.requestedHeight : 80
+    }
+
+    function getTargetRadius() {
+        if (!root.isIsland) return Theme.radiusPanel
+        let mod = root.getActiveModule()
+        return mod ? mod.requestedRadius : 18
+    }
+
     // Blur spike logic
     property real animBlur: 0.0
     onIsIslandChanged: {
@@ -47,15 +73,15 @@ Rectangle {
         NumberAnimation { target: root; property: "animBlur"; to: 0.0; duration: 300; easing.type: Easing.OutQuad }
     }
 
-    implicitWidth: isIsland ? (isReminderIsland ? reminderModule.requestedWidth : (isAsideIsland ? asideModule.requestedWidth : (isLocalSendIsland ? localSendModule.requestedWidth : 600))) : (layout.implicitWidth + 12)
-    implicitHeight: isIsland ? (isReminderIsland ? reminderModule.requestedHeight : (isAsideIsland ? asideModule.requestedHeight : (isLocalSendIsland ? localSendModule.requestedHeight : 80))) : (layout.implicitHeight + 14)
+    implicitWidth: getTargetWidth()
+    implicitHeight: getTargetHeight()
 
     transform: Translate {
         id: workspaceShift
         y: {
             if (!root.isIsland) return 0;
             // Compensate for Row recentering: keep top edge fixed so expansion goes downward only
-            var targetH = root.isReminderIsland ? reminderModule.requestedHeight : (root.isAsideIsland ? asideModule.requestedHeight : (root.isLocalSendIsland ? localSendModule.requestedHeight : 80));
+            var targetH = root.getTargetHeight();
             return targetH / 2 - 24;
         }
         Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
@@ -257,8 +283,8 @@ Rectangle {
         anchors.bottomMargin: 16
         spacing: 12
 
-        opacity: root.isIsland && !root.isReminderIsland && !root.isAsideIsland && !root.isLocalSendIsland ? 1.0 : 0.0
-        scale: root.isIsland && !root.isReminderIsland && !root.isAsideIsland && !root.isLocalSendIsland ? 1.0 : 0.6
+        opacity: root.isIsland && !root.getActiveModule() ? 1.0 : 0.0
+        scale: root.isIsland && !root.getActiveModule() ? 1.0 : 0.6
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: 400 } }
         Behavior on scale { NumberAnimation { duration: 600; easing.type: Easing.OutBack } }
