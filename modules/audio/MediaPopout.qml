@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
-import Quickshell.Io
 import "../../components"
 import "../../core"
 
@@ -13,23 +12,11 @@ PopoutWrapper {
     originX: popoutWidth / 2
     autoClose: false
 
-    // ─── Данные медиа ──────────────────────────────────────────────────
-    property string mediaTitle: ""
-    property string mediaArtist: ""
-    property string mediaAlbum: ""
-    property string mediaStatus: "Stopped"  // "Playing" | "Paused" | "Stopped"
-    property string mediaArtUrl: ""
-    property string mediaPlayer: ""
-    
-    // Новые свойства для прогресса
-    property real mediaLength: 0
-    property real mediaPosition: 0
-
     LyricsController {
         id: lyricsCtrl
-        mediaTitle: root.mediaTitle
-        mediaArtist: root.mediaArtist
-        mediaPosition: root.mediaPosition
+        mediaTitle: MediaState.mediaTitle
+        mediaArtist: MediaState.mediaArtist
+        mediaPosition: MediaState.mediaPosition
     }
 
     RowLayout {
@@ -58,7 +45,7 @@ PopoutWrapper {
                 Image {
                     id: albumArt
                     anchors.fill: parent
-                    source: root.mediaArtUrl
+                    source: MediaState.mediaArtUrl
                     fillMode: Image.PreserveAspectCrop
                     visible: status === Image.Ready
                     smooth: true
@@ -85,7 +72,7 @@ PopoutWrapper {
                 
                 Text {
                     id: trackTitle
-                    text: root.mediaTitle || "No Media Playing"
+                    text: MediaState.mediaTitle || "No Media Playing"
                     color: Theme.textPrimary
                     font { pixelSize: 22; bold: true }
                     Layout.fillWidth: true
@@ -94,7 +81,7 @@ PopoutWrapper {
 
                 Text {
                     id: trackArtistAlbum
-                    text: root.mediaArtist || "—"
+                    text: MediaState.mediaArtist || "—"
                     color: Theme.textSecondary
                     font.pixelSize: 14
                     Layout.fillWidth: true
@@ -115,16 +102,16 @@ PopoutWrapper {
                     font.pixelSize: 28
                     Behavior on color { ColorAnimation { duration: 150 } }
                     HoverHandler { id: prevHover }
-                    TapHandler { onTapped: prevProc.running = true }
+                    TapHandler { onTapped: MediaState.previous() }
                 }
 
                 Text {
-                    text: root.mediaStatus === "Playing" ? "\udb80\udfe4" : "\udb81\udc0a" // Pause : Play
+                    text: MediaState.mediaStatus === "Playing" ? "\udb80\udfe4" : "\udb81\udc0a" // Pause : Play
                     color: playHover.hovered ? Theme.textPrimary : Theme.textSecondary
                     font.pixelSize: 38
                     Behavior on color { ColorAnimation { duration: 150 } }
                     HoverHandler { id: playHover }
-                    TapHandler { onTapped: playPauseProc.running = true }
+                    TapHandler { onTapped: MediaState.playPause() }
                 }
 
                 Text {
@@ -133,7 +120,7 @@ PopoutWrapper {
                     font.pixelSize: 28
                     Behavior on color { ColorAnimation { duration: 150 } }
                     HoverHandler { id: nextHover }
-                    TapHandler { onTapped: nextProc.running = true }
+                    TapHandler { onTapped: MediaState.next() }
                 }
             }
 
@@ -146,13 +133,12 @@ PopoutWrapper {
                     id: progressSlider
                     Layout.fillWidth: true
                     from: 0
-                    to: root.mediaLength > 0 ? root.mediaLength : 100
-                    value: pressed ? value : root.mediaPosition
-                    enabled: root.mediaStatus !== "Stopped"
+                    to: MediaState.mediaLength > 0 ? MediaState.mediaLength : 100
+                    value: pressed ? value : MediaState.mediaPosition
+                    enabled: MediaState.mediaStatus !== "Stopped"
                     
                     onMoved: {
-                        seekProc.command = ["playerctl", "-p", root.mediaPlayer || "spotify,firefox,%any", "position", String(Math.floor(value))];
-                        seekProc.running = true;
+                        MediaState.seek(value);
                     }
                     
                     background: Rectangle {
@@ -188,7 +174,7 @@ PopoutWrapper {
                     Layout.fillWidth: true
                     
                     Text {
-                        text: lyricsCtrl.formatTime(root.mediaPosition)
+                        text: lyricsCtrl.formatTime(MediaState.mediaPosition)
                         color: Theme.textSecondary
                         font.pixelSize: 11
                     }
@@ -196,7 +182,7 @@ PopoutWrapper {
                     Item { Layout.fillWidth: true }
                     
                     Text {
-                        text: lyricsCtrl.formatTime(root.mediaLength)
+                        text: lyricsCtrl.formatTime(MediaState.mediaLength)
                         color: Theme.textSecondary
                         font.pixelSize: 11
                     }
@@ -211,85 +197,16 @@ PopoutWrapper {
             controller: lyricsCtrl
 
             onSeekRequested: (time, index) => {
-                seekProc.command = ["playerctl", "-p", root.mediaPlayer || "spotify,firefox,%any", "position", String(time)];
-                seekProc.running = true;
-                root.mediaPosition = time;
+                MediaState.seek(time);
+                MediaState.mediaPosition = time;
                 lyricsCtrl.seekToIndex(index, time);
             }
         }
     }
 
-    // ─── УПРАВЛЕНИЕ (Processes) ────────────────────────────────────────
-    Process {
-        id: playPauseProc
-        command: ["playerctl", "--player=spotify,firefox,%any", "play-pause"]
-        onExited: mediaPoller.running = true
-    }
-
-    Process {
-        id: nextProc
-        command: ["playerctl", "--player=spotify,firefox,%any", "next"]
-        onExited: mediaPoller.running = true
-    }
-
-    Process {
-        id: prevProc
-        command: ["playerctl", "--player=spotify,firefox,%any", "previous"]
-        onExited: mediaPoller.running = true
-    }
-
-    Process {
-        id: seekProc
-        command: ["playerctl", "position", "0"]
-        onExited: mediaPoller.running = true
-    }
-
-    // ─── ДАННЫЕ (Playerctl Poller) ──────────────────────────────────────
-    Process {
-        id: mediaPoller
-        command: ["sh", "-c", "playerctl --player=spotify,firefox,%any metadata --format '{{status}}|||{{title}}|||{{artist}}|||{{album}}|||{{mpris:artUrl}}|||{{playerName}}|||{{mpris:length}}|||{{position}}' 2>/dev/null || echo 'Stopped||||||||||||||'"]
-
-        stdout: SplitParser {
-            onRead: data => {
-                let parts = data.trim().split("|||");
-                if (parts.length >= 8) {
-                    root.mediaStatus = parts[0] || "Stopped";
-                    root.mediaTitle = parts[1] || "";
-                    root.mediaArtist = parts[2] || "";
-                    root.mediaAlbum = parts[3] || "";
-                    root.mediaArtUrl = parts[4] || "";
-                    root.mediaPlayer = parts[5] || "";
-                    
-                    // Конвертация микросекунд в секунды
-                    let len = parseInt(parts[6]);
-                    root.mediaLength = isNaN(len) ? 0 : len / 1000000;
-                    
-                    let pos = parseInt(parts[7]);
-                    root.mediaPosition = isNaN(pos) ? 0 : pos / 1000000;
-                } else {
-                    root.mediaStatus = "Stopped";
-                    root.mediaTitle = "";
-                    root.mediaArtist = "";
-                    root.mediaAlbum = "";
-                    root.mediaArtUrl = "";
-                    root.mediaPlayer = "";
-                    root.mediaLength = 0;
-                    root.mediaPosition = 0;
-                }
-            }
-        }
-    }
-
-    Timer {
-        interval: 1000
-        running: root.isOpen
-        repeat: true
-        onTriggered: mediaPoller.running = true
-    }
-
     onIsOpenChanged: {
         if (isOpen) {
-            mediaPoller.running = true;
+            MediaState.poll();
         }
     }
 }
