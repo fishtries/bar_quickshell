@@ -21,6 +21,22 @@ QtObject {
         onTriggered: root.reloadTodos()
     }
 
+    readonly property Timer _watchDebounce: Timer {
+        interval: 500
+        running: false
+        repeat: false
+        onTriggered: root.reloadTodos()
+    }
+
+    readonly property FileView _taskDbWatcher: FileView {
+        path: root._taskDataLocation + "/taskchampion.sqlite3"
+        watchChanges: true
+        onFileChanged: {
+            if (!root._exportProcess.running && !root._mutationProcess.running)
+                root._watchDebounce.restart()
+        }
+    }
+
     readonly property Process _exportProcess: Process {
         command: []
         stdout: SplitParser {
@@ -59,6 +75,9 @@ QtObject {
     }
 
     function reloadTodos() {
+        if (root._mutationProcess.running)
+            return false;
+
         if (root._exportProcess.running) {
             root._reloadQueued = true;
             return false;
