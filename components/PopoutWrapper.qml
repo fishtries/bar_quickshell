@@ -66,6 +66,34 @@ Item {
     property real dragX: 0
     readonly property real tearThreshold: 100
 
+    property bool isSnappingBack: false
+
+    ParallelAnimation {
+        id: snapBackAnimation
+        NumberAnimation {
+            target: root
+            property: "dragY"
+            to: 0
+            duration: AnimationConfig.durationExtraSlow
+            easing.type: Easing.OutElastic
+            easing.amplitude: 1.0
+            easing.period: 0.8
+        }
+        NumberAnimation {
+            target: root
+            property: "dragX"
+            to: 0
+            duration: AnimationConfig.durationVerySlow
+            easing.type: Easing.OutElastic
+            easing.amplitude: 1.0
+            easing.period: 0.4
+        }
+        onFinished: {
+            root.isStretching = false;
+            root.isSnappingBack = false;
+        }
+    }
+
     HoverHandler {
         id: hover
     }
@@ -207,7 +235,7 @@ Item {
             onFinished: {
                 root.detachedDrop(popoutRect.x, popoutRect.y);
                 root.isDetached = false;
-                root.isOpen = false;
+                root.closeRequested();
             }
         }
 
@@ -229,11 +257,8 @@ Item {
                         if (root.isDetached) {
                             dissolveAnimation.start();
                         } else {
-                            if (root.isStretching) {
-                                root.isStretching = false;
-                            }
-                            root.dragX = 0;
-                            root.dragY = 0;
+                            root.isSnappingBack = true;
+                            snapBackAnimation.start();
                         }
                     }
                 }
@@ -274,10 +299,10 @@ Item {
                     Behavior on yScale {
                         enabled: !root.isStretching
                         NumberAnimation {
-                            duration: AnimationConfig.durationModerate
-                            easing.type: root.isDetached ? Easing.OutBack : AnimationConfig.easingSpringOut
-                            easing.amplitude: AnimationConfig.springAmplitudePopout
-                            easing.period: AnimationConfig.springPeriodPopout
+                            duration: AnimationConfig.durationVerySlow
+                            easing.type: Easing.OutElastic
+                            easing.amplitude: 1.0
+                            easing.period: 0.8
                         }
                     }
                 }
@@ -322,14 +347,14 @@ Item {
     Binding {
         target: popoutRect
         property: "blurValue"
-        value: 0
+        value: root.isStretching ? Math.min(1.0, root.dragY / root.tearThreshold) : 0
         when: root.isOpen && root.isSettled && !root.isDetached
     }
 
     Binding {
         target: contentColumn
         property: "opacity"
-        value: 1.0
+        value: root.isStretching ? Math.max(0.3, 1.0 - (root.dragY / root.tearThreshold)) : 1.0
         when: root.isOpen && root.isSettled
     }
 
