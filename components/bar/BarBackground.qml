@@ -16,12 +16,16 @@ Item {
 
     property Item popoutParent: null
 
+    // Common Y coordinate for all popout tops (bar height + gap)
+    readonly property real popoutTopY: height - 5
+
     // ─── Левая группа: Часы и Задачи ───────────────────────────────────────────
     LeftSection {
         id: leftSection
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         popoutParent: layoutContainer.popoutParent
+        popoutTopY: layoutContainer.popoutTopY
     }
 
     // ─── Центральная группа: ИДЕАЛЬНЫЙ ЦЕНТР ───────────────────────────
@@ -29,6 +33,7 @@ Item {
         id: centerSection
         anchors.centerIn: parent
         popoutParent: layoutContainer.popoutParent
+        popoutTopY: layoutContainer.popoutTopY
     }
 
     // ─── Правая группа: У КРАЯ ─────────────────────────────────────────
@@ -36,5 +41,6 @@ Item {
         id: rightSection
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
+        popoutTopY: layoutContainer.popoutTopY
     }
 }

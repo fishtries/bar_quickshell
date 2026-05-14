@@ -12,17 +12,20 @@ Row {
     property alias sysTray: sysTray
 
     property Item popoutParent: null
+    property real popoutTopY: 0
 
     ClockModule {
         id: clockModule
         anchors.verticalCenter: parent.verticalCenter
         popoutParent: leftGroup.popoutParent
+        popoutTopY: leftGroup.popoutTopY
     }
 
     TodoModule {
         id: todoModule
         anchors.verticalCenter: parent.verticalCenter
         popoutParent: leftGroup.popoutParent
+        popoutTopY: leftGroup.popoutTopY
     }
 
     SystemTrayModule {

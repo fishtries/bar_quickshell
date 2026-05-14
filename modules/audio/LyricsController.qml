@@ -6,6 +6,7 @@ QtObject {
     property string mediaTitle: ""
     property string mediaArtist: ""
     property real mediaPosition: 0
+    property var activeXhr: null
     property int currentLyricIndex: -1
     property bool manualMode: false
     property int revealedCount: 0
@@ -60,7 +61,16 @@ QtObject {
         restoreAutoScrollTimer.restart();
     }
 
+    function abortActiveXhr() {
+        if (controller.activeXhr) {
+            controller.activeXhr.abort();
+            controller.activeXhr = null;
+        }
+    }
+
     function fetchLyrics() {
+        abortActiveXhr();
+
         let cleanArtist = cleanMetadata(controller.mediaArtist);
         let cleanTitle = cleanMetadata(controller.mediaTitle);
 
@@ -71,8 +81,10 @@ QtObject {
         console.log("Fetching lyrics: " + cleanArtist + " - " + cleanTitle);
 
         let xhr = new XMLHttpRequest();
+        controller.activeXhr = xhr;
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr === controller.activeXhr) controller.activeXhr = null;
                 if (xhr.status === 200) {
                     let json = JSON.parse(xhr.responseText);
                     internalLyricsModel.clear();
@@ -98,7 +110,7 @@ QtObject {
                         }
                     }
                     startReveal();
-                } else {
+                } else if (xhr.status !== 0) {
                     console.log("Lyrics not found for: " + cleanArtist + " - " + cleanTitle);
                     internalLyricsModel.clear();
                     controller.revealedCount = 0;
@@ -116,6 +128,7 @@ QtObject {
     }
 
     onMediaTitleChanged: {
+        abortActiveXhr();
         if (mediaTitle) {
             internalLyricsModel.clear();
             controller.revealedCount = 0;
@@ -126,6 +139,7 @@ QtObject {
     }
 
     onMediaArtistChanged: {
+        abortActiveXhr();
         if (mediaArtist) {
             internalLyricsModel.clear();
             controller.revealedCount = 0;

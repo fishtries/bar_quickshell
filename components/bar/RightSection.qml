@@ -12,6 +12,7 @@ Row {
     property alias volModule: volModule
     property alias asideModule: asideModule
     property alias ccModule: ccModule
+    property real popoutTopY: 0
 
     AnimatedBarItem {
         anchors.verticalCenter: parent.verticalCenter
@@ -40,6 +41,7 @@ Row {
         height: ccModule.implicitHeight
         ControlCenterModule {
             id: ccModule
+            popoutTopY: rightGroup.popoutTopY
         }
     }
 }

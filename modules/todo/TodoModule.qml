@@ -13,10 +13,12 @@ Item {
     property Item popoutItem: popout
     property Item popoutMaskItem: popout.maskItem
     property Item popoutParent: null
+    property real popoutTopY: 0
     property real popoutHorizontalOffset: 113
     readonly property Item effectivePopoutParent: popoutParent ? popoutParent : root
     readonly property real effectiveHeight: root.height > 0 ? root.height : root.implicitHeight
-    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, root.popoutHorizontalOffset, root.effectiveHeight + 24)
+    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, root.popoutHorizontalOffset, root.popoutTopY > 0 ? root.popoutTopY - root.mapToItem(root.effectivePopoutParent, 0, 0).y : root.effectiveHeight + 24)
+    readonly property real popoutOriginX: Math.max(20, root.mapToItem(root.effectivePopoutParent, root.implicitWidth / 2, 0).x - root.popoutPosition.x)
 
     Rectangle {
         id: btnRect
@@ -54,6 +56,6 @@ Item {
         y: root.popoutPosition.y
         z: 1000
         
-        originX: 16 // Центр иконки
+        originX: root.popoutOriginX
     }
 }

@@ -155,6 +155,7 @@ Rectangle {
 
     property bool popoutOpen: false
     property Item popoutItem: popout
+    property real popoutTopY: 0
 
     onPopoutOpenChanged: {
         if (popoutOpen) {
@@ -284,7 +285,7 @@ Rectangle {
         onRequestMathDetails: MathState.popoutOpen = true
 
         anchors.top: networkIcons.bottom
-        anchors.topMargin: 6
+        anchors.topMargin: 9
         anchors.right: networkIcons.right
 
         // Анимация открывается из центра между иконками Wi-Fi и Bluetooth

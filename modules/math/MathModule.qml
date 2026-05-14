@@ -19,6 +19,7 @@ Item {
 
     property bool popoutOpen: MathState.popoutOpen
     property Item popoutItem: popout
+    property real popoutTopY: 0
 
     implicitWidth: barContainer.width
     implicitHeight: 36
@@ -123,8 +124,7 @@ Item {
             MathState.endSession();
         }
         
-        anchors.top: barContainer.bottom
-        anchors.topMargin: 6
+        y: root.popoutTopY > 0 ? root.popoutTopY - root.mapToItem(null, 0, 0).y : barContainer.y + barContainer.height + 6
         anchors.horizontalCenter: barContainer.horizontalCenter
         
         anchors.horizontalCenterOffset: root.isActive ? 0 : -30

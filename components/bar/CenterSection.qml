@@ -14,6 +14,7 @@ Row {
     property alias audioVis: audioVis
 
     property Item popoutParent: null
+    property real popoutTopY: 0
 
     AnimatedBarItem {
         anchors.verticalCenter: parent.verticalCenter
@@ -36,6 +37,7 @@ Row {
 
         MathModule {
             id: mathModule
+            popoutTopY: centerGroup.popoutTopY
         }
     }
 
@@ -47,6 +49,7 @@ Row {
         CavaVisualizer {
             id: audioVis
             popoutParent: centerGroup.popoutParent
+            popoutTopY: centerGroup.popoutTopY
         }
     }
 }

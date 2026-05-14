@@ -13,9 +13,11 @@ Item {
     property Item popoutItem: popout
     property Item popoutMaskItem: popout.maskItem
     property Item popoutParent: null
+    property real popoutTopY: 0
     readonly property Item effectivePopoutParent: popoutParent ? popoutParent : root
     readonly property real effectiveHeight: root.height > 0 ? root.height : root.implicitHeight
-    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, 0, root.effectiveHeight + 8)
+    readonly property var popoutPosition: root.mapToItem(root.effectivePopoutParent, 15, root.popoutTopY > 0 ? root.popoutTopY - root.mapToItem(root.effectivePopoutParent, 0, 0).y : root.effectiveHeight + 8)
+    readonly property real popoutOriginX: root.mapToItem(root.effectivePopoutParent, timeText.implicitWidth / 2, 0).x - root.popoutPosition.x
 
     AppText {
         id: timeText
@@ -50,7 +52,7 @@ Item {
         y: root.popoutPosition.y
         z: 1000
         
-        // Точка вылета анимации пузыря (смещена влево к часам)
-        originX: 22
+        // Точка вылета анимации пузыря (из центра модуля часов)
+        originX: root.popoutOriginX
     }
 }

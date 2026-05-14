@@ -9,21 +9,23 @@ Item {
     id: root
     
     property bool isActive: false
-    property real currentWidth: isActive ? 80 : 0
+    property bool isSpotifyOpen: MediaState.mediaPlayer === "spotify" && MediaState.mediaStatus !== "Stopped"
+    property real currentWidth: isActive ? 80 : (isSpotifyOpen ? 24 : 0)
     property real blurLevel: isActive ? 0.0 : 1.0
 
     property bool popoutOpen: false
     property Item popoutItem: mediaPopout
     property Item popoutMaskItem: mediaPopout.maskItem
     property Item popoutParent: null
+    property real popoutTopY: 0
     readonly property Item effectivePopoutParent: popoutParent ? popoutParent : root
     readonly property real effectiveWidth: root.width > 0 ? root.width : root.implicitWidth
     readonly property real effectiveHeight: root.height > 0 ? root.height : root.implicitHeight
     property var popoutPosition: Qt.point(0, 0)
 
     function updatePopoutPosition() {
-        const position = root.mapToItem(root.effectivePopoutParent, root.effectiveWidth / 2, root.effectiveHeight + 28)
-        root.popoutPosition = Qt.point(position.x, position.y)
+        const position = root.mapToItem(root.effectivePopoutParent, root.effectiveWidth / 2, 0)
+        root.popoutPosition = Qt.point(position.x, root.popoutTopY > 0 ? root.popoutTopY : position.y + root.effectiveHeight + 28)
     }
 
     onPopoutOpenChanged: {
@@ -37,7 +39,7 @@ Item {
     implicitWidth: currentWidth
     implicitHeight: 20
     
-    opacity: isActive ? 1.0 : 0.0
+    opacity: (isActive || isSpotifyOpen) ? 1.0 : 0.0
     
     Behavior on currentWidth { NumberAnimation { duration: 700; easing.type: Easing.InOutQuad } }
     Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
@@ -85,6 +87,7 @@ Item {
         id: barsContainer
         anchors.fill: parent
         clip: true
+        visible: root.isActive
 
         layer.enabled: root.blurLevel > 0.0
         layer.effect: MultiEffect {
@@ -114,6 +117,23 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    Text {
+        id: musicIcon
+        anchors.centerIn: parent
+        text: "\uf001"
+        color: Theme.foregroundForItem(musicIcon)
+        font.family: Theme.fontIcon
+        font.pixelSize: 16
+        visible: !root.isActive && root.isSpotifyOpen
+
+        SequentialAnimation on scale {
+            running: musicIcon.visible
+            loops: Animation.Infinite
+            NumberAnimation { to: 1.2; duration: 800; easing.type: Easing.InOutQuad }
+            NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
         }
     }
 
