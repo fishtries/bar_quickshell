@@ -168,7 +168,7 @@ Item {
 
         onDetachedDrop: (dropX, dropY) => {
             const globalPos = mediaPopout.mapToGlobal(dropX, dropY);
-            standaloneMediaComp.createObject(null, {
+            standaloneMediaComp.createObject(root, {
                 spawnX: globalPos.x,
                 spawnY: globalPos.y
             });
@@ -179,8 +179,8 @@ Item {
         id: standaloneMediaComp
         StandaloneWindow {
             id: standaloneWin
-            implicitWidth: 393
-            implicitHeight: 520
+            width: 393
+            height: 520
 
             LyricsController {
                 id: standaloneLyricsCtrl

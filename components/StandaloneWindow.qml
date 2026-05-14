@@ -1,9 +1,8 @@
 import QtQuick
-import Quickshell
-import Quickshell.Wayland
+import QtQuick.Window
 import "../core"
 
-PanelWindow {
+Window {
     id: root
 
     property real spawnX: 0
@@ -11,18 +10,15 @@ PanelWindow {
 
     default property alias content: contentArea.data
 
-    implicitWidth: 400
-    implicitHeight: 500
+    width: 400
+    height: 500
+    visible: true
     color: "transparent"
 
-    anchors.top: true
-    anchors.left: true
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "qs-standalone"
-    WlrLayershell.exclusiveZone: -1
-
-    margins.top: spawnY
-    margins.left: spawnX
+    x: spawnX
+    y: spawnY
+    flags: Qt.FramelessWindowHint | Qt.Window
+    title: "qs-media-standalone"
 
     Item {
         id: contentArea
