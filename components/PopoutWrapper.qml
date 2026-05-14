@@ -56,7 +56,15 @@ Item {
         NumberAnimation { duration: AnimationConfig.durationVerySlow; easing.type: AnimationConfig.easingMovementInOut }
     }
     signal closeRequested()
+    signal detachedDrop(real dropX, real dropY)
     property bool autoClose: true
+
+    property bool enableTearOff: false
+    property bool isStretching: false
+    property bool isDetached: false
+    property real dragY: 0
+    property real dragX: 0
+    readonly property real tearThreshold: 100
 
     HoverHandler {
         id: hover
@@ -93,8 +101,11 @@ Item {
         width: 0
         height: 0
         Behavior on height {
-            enabled: root.isSettled && root.animateContentResize
-            NumberAnimation { duration: root.contentResizeDuration; easing.type: root.contentResizeEasingType }
+            enabled: root.isSettled && (root.animateContentResize || !root.isStretching)
+            NumberAnimation {
+                duration: root.isDetached ? AnimationConfig.durationModerate : root.contentResizeDuration
+                easing.type: root.isDetached ? Easing.OutBack : root.contentResizeEasingType
+            }
         }
         radius: Theme.radiusPopout
         color: Theme.bgPopout
@@ -188,6 +199,60 @@ Item {
             blur: popoutRect.blurValue
         }
 
+        // Анимация растворения при отрыве
+        ParallelAnimation {
+            id: dissolveAnimation
+            NumberAnimation { target: popoutRect; property: "blurValue"; to: 1.0; duration: 250; easing.type: Easing.Linear }
+            NumberAnimation { target: popoutRect; property: "opacity"; to: 0; duration: 250; easing.type: Easing.Linear }
+            onFinished: {
+                root.detachedDrop(popoutRect.x, popoutRect.y);
+                root.isDetached = false;
+                root.isOpen = false;
+            }
+        }
+
+        // Зона захвата для отрыва попаута
+        Item {
+            id: tearZone
+            height: 30
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            visible: root.enableTearOff
+
+            DragHandler {
+                enabled: root.enableTearOff
+                id: tearHandler
+                target: null
+                onActiveChanged: {
+                    if (!active) {
+                        if (root.isDetached) {
+                            dissolveAnimation.start();
+                        } else {
+                            if (root.isStretching) {
+                                root.isStretching = false;
+                            }
+                            root.dragX = 0;
+                            root.dragY = 0;
+                        }
+                    }
+                }
+                onTranslationChanged: {
+                    if (tearHandler.active) {
+                        root.dragX = tearHandler.translation.x;
+                        root.dragY = tearHandler.translation.y;
+                        if (root.isStretching && tearHandler.translation.y > root.tearThreshold) {
+                            root.isStretching = false;
+                            root.isDetached = true;
+                        }
+                        if (!root.isDetached) {
+                            root.isStretching = tearHandler.translation.y > 0;
+                        }
+                    }
+                }
+            }
+        }
+
         // Внутренний контейнер с обрезкой для содержимого
         Item {
             anchors.fill: parent
@@ -202,6 +267,20 @@ Item {
                 opacity: 0.0
                 scale: 0.95
                 transformOrigin: Item.Top
+
+                transform: Scale {
+                    origin.y: 0
+                    yScale: root.isStretching ? (1.0 + (root.dragY / root.contentHeight)) : 1.0
+                    Behavior on yScale {
+                        enabled: !root.isStretching
+                        NumberAnimation {
+                            duration: AnimationConfig.durationModerate
+                            easing.type: root.isDetached ? Easing.OutBack : AnimationConfig.easingSpringOut
+                            easing.amplitude: AnimationConfig.springAmplitudePopout
+                            easing.period: AnimationConfig.springPeriodPopout
+                        }
+                    }
+                }
 
                 ColumnLayout {
                     id: contentLayout
@@ -222,21 +301,21 @@ Item {
     Binding {
         target: popoutRect
         property: "height"
-        value: root.contentHeight
+        value: root.isStretching ? root.contentHeight + root.dragY : root.contentHeight
         when: root.isOpen && root.isSettled
     }
 
     Binding {
         target: popoutRect
         property: "x"
-        value: 0
+        value: root.isDetached ? root.dragX : 0
         when: root.isOpen && root.isSettled
     }
 
     Binding {
         target: popoutRect
         property: "y"
-        value: 0
+        value: root.isDetached ? (root.dragY - root.tearThreshold) : 0
         when: root.isOpen && root.isSettled
     }
 
@@ -244,7 +323,7 @@ Item {
         target: popoutRect
         property: "blurValue"
         value: 0
-        when: root.isOpen && root.isSettled
+        when: root.isOpen && root.isSettled && !root.isDetached
     }
 
     Binding {

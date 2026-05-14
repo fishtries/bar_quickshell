@@ -8,6 +8,7 @@ import "../../core"
 PopoutWrapper {
     id: root
 
+    enableTearOff: true
     popoutWidth: (lyricsCtrl.lyricsModel && lyricsCtrl.lyricsModel.count > 0) ? 780 : 393
     originX: popoutWidth / 2
     autoClose: false
