@@ -12,6 +12,7 @@ Item {
     property bool isSpotifyOpen: MediaState.mediaPlayer === "spotify" && MediaState.mediaStatus !== "Stopped"
     property real currentWidth: isActive ? 80 : (isSpotifyOpen ? 24 : 0)
     property real blurLevel: isActive ? 0.0 : 1.0
+    property real iconBlurLevel: isActive ? 1.0 : 0.0
 
     property bool popoutOpen: false
     property Item popoutItem: mediaPopout
@@ -44,6 +45,7 @@ Item {
     Behavior on currentWidth { NumberAnimation { duration: 700; easing.type: Easing.InOutQuad } }
     Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
     Behavior on blurLevel { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
+    Behavior on iconBlurLevel { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
     
     property var values: [0, 0, 0, 0, 0, 0]
     
@@ -87,9 +89,11 @@ Item {
         id: barsContainer
         anchors.fill: parent
         clip: true
-        visible: root.isActive
+        opacity: root.isActive ? 1.0 : 0.0
 
-        layer.enabled: root.blurLevel > 0.0
+        Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
+
+        layer.enabled: true
         layer.effect: MultiEffect {
             blurEnabled: true
             blurMax: 30
@@ -120,20 +124,27 @@ Item {
         }
     }
 
-    Text {
-        id: musicIcon
-        anchors.centerIn: parent
-        text: "\uf001"
-        color: Theme.foregroundForItem(musicIcon)
-        font.family: Theme.fontIcon
-        font.pixelSize: 16
-        visible: !root.isActive && root.isSpotifyOpen
+    Item {
+        id: iconContainer
+        anchors.fill: parent
+        opacity: (!root.isActive && root.isSpotifyOpen) ? 1.0 : 0.0
 
-        SequentialAnimation on scale {
-            running: musicIcon.visible
-            loops: Animation.Infinite
-            NumberAnimation { to: 1.2; duration: 800; easing.type: Easing.InOutQuad }
-            NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
+        Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
+
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 30
+            blur: root.iconBlurLevel
+        }
+
+        Text {
+            id: musicIcon
+            anchors.centerIn: parent
+            text: "\u266A"
+            color: Theme.foregroundForItem(musicIcon)
+            font.family: Theme.fontIcon
+            font.pixelSize: 18
         }
     }
 
