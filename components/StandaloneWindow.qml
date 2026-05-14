@@ -5,8 +5,12 @@ import "../core"
 Window {
     id: root
 
+    signal windowDestroyed()
+
     property real spawnX: 0
     property real spawnY: 0
+
+    Component.onDestruction: windowDestroyed()
 
     default property alias content: contentArea.data
 

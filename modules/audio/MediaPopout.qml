@@ -206,6 +206,11 @@ PopoutWrapper {
     }
 
     onIsOpenChanged: {
+        if (isOpen && root.standaloneWindowActive) {
+            isOpen = false;
+            return;
+        }
+
         if (isOpen) {
             MediaState.poll();
         }

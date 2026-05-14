@@ -60,6 +60,7 @@ Item {
     property bool autoClose: true
 
     property bool enableTearOff: false
+    property bool standaloneWindowActive: false
     property bool isStretching: false
     property bool isDetached: false
     property real dragY: 0
@@ -67,6 +68,29 @@ Item {
     readonly property real tearThreshold: 100
 
     property bool isSnappingBack: false
+    property real animOffsetX: 0
+    property real animOffsetY: 0
+
+    NumberAnimation {
+        id: snapAnimX
+        target: root
+        property: "animOffsetX"
+        to: 0
+        duration: 1000
+        easing.type: Easing.OutElastic
+        easing.amplitude: 1.0
+        easing.period: 0.8
+    }
+    NumberAnimation {
+        id: snapAnimY
+        target: root
+        property: "animOffsetY"
+        to: 0
+        duration: 1000
+        easing.type: Easing.OutElastic
+        easing.amplitude: 1.0
+        easing.period: 0.8
+    }
 
     ParallelAnimation {
         id: snapBackAnimation
@@ -140,6 +164,7 @@ Item {
         // Вычисляются через анимацию x
         x: root.activeOriginX
         y: 0
+
 
         scale: root.bubbleScale
         transformOrigin: Item.Top
@@ -268,7 +293,20 @@ Item {
                         root.dragY = tearHandler.translation.y;
                         if (root.isStretching && tearHandler.translation.y > root.tearThreshold) {
                             root.isStretching = false;
+
+                            let targetX = root.width / 2 + translation.x - popoutRect.width / 2;
+                            let targetY = root.contentHeight + translation.y - popoutRect.height / 2;
+
+                            let currentX = root.originX - popoutRect.width / 2;
+                            let currentY = 0;
+
+                            root.animOffsetX = currentX - targetX;
+                            root.animOffsetY = currentY - targetY;
+
                             root.isDetached = true;
+
+                            snapAnimX.start();
+                            snapAnimY.start();
                         }
                         if (!root.isDetached) {
                             root.isStretching = tearHandler.translation.y > 0;
@@ -333,14 +371,14 @@ Item {
     Binding {
         target: popoutRect
         property: "x"
-        value: root.isDetached ? root.dragX : 0
+        value: root.isDetached ? (root.width / 2 + root.dragX - popoutRect.width / 2 + root.animOffsetX) : (root.originX - popoutRect.width / 2)
         when: root.isOpen && root.isSettled
     }
 
     Binding {
         target: popoutRect
         property: "y"
-        value: root.isDetached ? (root.dragY - root.tearThreshold) : 0
+        value: root.isDetached ? (root.contentHeight + root.dragY - popoutRect.height / 2 + root.animOffsetY) : 0
         when: root.isOpen && root.isSettled
     }
 

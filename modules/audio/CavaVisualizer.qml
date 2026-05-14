@@ -11,6 +11,7 @@ Item {
     id: root
     
     property bool isActive: false
+    property var activeStandaloneWindow: null
     property bool isSpotifyOpen: MediaState.mediaPlayer === "spotify" && MediaState.mediaStatus !== "Stopped"
     property real currentWidth: isActive ? 80 : (isSpotifyOpen ? 24 : 0)
     property real blurLevel: isActive ? 0.0 : 1.0
@@ -168,9 +169,15 @@ Item {
 
         onDetachedDrop: (dropX, dropY) => {
             const globalPos = mediaPopout.mapToGlobal(dropX, dropY);
-            standaloneMediaComp.createObject(root, {
+            let win = standaloneMediaComp.createObject(root, {
                 spawnX: globalPos.x,
                 spawnY: globalPos.y
+            });
+            root.activeStandaloneWindow = win;
+            mediaPopout.standaloneWindowActive = true;
+            win.windowDestroyed.connect(function() {
+                root.activeStandaloneWindow = null;
+                mediaPopout.standaloneWindowActive = false;
             });
         }
     }
