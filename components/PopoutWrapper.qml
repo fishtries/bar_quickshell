@@ -28,9 +28,19 @@ Item {
     Connections {
         target: root
         function onIsOpenChanged() {
-            if (root.isOpen)
+            if (root.isOpen) {
+                root.isStretching = false;
+                root.isDetached = false;
+                root.isSnappingBack = false;
+                root.dragX = 0;
+                root.dragY = 0;
+                root.followDragX = 0;
+                root.followDragY = 0;
+                root.animOffsetX = 0;
+                root.animOffsetY = 0;
+                popoutRect.opacity = 1.0;
                 root.syncCloseGeometry();
-            else {
+            } else {
                 root.syncCloseGeometry();
                 root.isSettled = false;
             }
@@ -60,11 +70,12 @@ Item {
     property bool autoClose: true
 
     property bool enableTearOff: false
-    property bool standaloneWindowActive: false
     property bool isStretching: false
     property bool isDetached: false
     property real dragY: 0
     property real dragX: 0
+    property real followDragY: 0
+    property real followDragX: 0
     readonly property real tearThreshold: 100
 
     property bool isSnappingBack: false
@@ -76,20 +87,20 @@ Item {
         target: root
         property: "animOffsetX"
         to: 0
-        duration: 1000
+        duration: 1500
         easing.type: Easing.OutElastic
         easing.amplitude: 1.0
-        easing.period: 0.8
+        easing.period: 0.7
     }
     NumberAnimation {
         id: snapAnimY
         target: root
         property: "animOffsetY"
         to: 0
-        duration: 1000
+        duration: 1500
         easing.type: Easing.OutElastic
         easing.amplitude: 1.0
-        easing.period: 0.8
+        easing.period: 0.7
     }
 
     ParallelAnimation {
@@ -116,6 +127,16 @@ Item {
             root.isStretching = false;
             root.isSnappingBack = false;
         }
+    }
+
+    Behavior on followDragX {
+        enabled: root.isDetached
+        NumberAnimation { duration: 920; easing.type: Easing.OutElastic; easing.amplitude: 1.0; easing.period: 0.68 }
+    }
+
+    Behavior on followDragY {
+        enabled: root.isDetached
+        NumberAnimation { duration: 920; easing.type: Easing.OutElastic; easing.amplitude: 1.0; easing.period: 0.68 }
     }
 
     HoverHandler {
@@ -153,7 +174,7 @@ Item {
         width: 0
         height: 0
         Behavior on height {
-            enabled: root.isSettled && (root.animateContentResize || !root.isStretching)
+            enabled: root.isSettled && !root.isStretching && (root.animateContentResize || root.isDetached)
             NumberAnimation {
                 duration: root.isDetached ? AnimationConfig.durationModerate : root.contentResizeDuration
                 easing.type: root.isDetached ? Easing.OutBack : root.contentResizeEasingType
@@ -176,7 +197,7 @@ Item {
         states: State {
             name: "open"
             when: root.isOpen
-            PropertyChanges { target: popoutRect; width: root.popoutWidth; height: contentColumn.implicitHeight + root.contentPadding * 2; x: 0; y: 0; blurValue: 0 }
+            PropertyChanges { target: popoutRect; width: root.popoutWidth; height: contentColumn.implicitHeight + root.contentPadding * 2; x: 0; y: 0; opacity: 1.0; blurValue: 0 }
             PropertyChanges { target: contentColumn; opacity: 1.0; scale: 1.0 }
         }
 
@@ -258,9 +279,19 @@ Item {
             NumberAnimation { target: popoutRect; property: "blurValue"; to: 1.0; duration: 250; easing.type: Easing.Linear }
             NumberAnimation { target: popoutRect; property: "opacity"; to: 0; duration: 250; easing.type: Easing.Linear }
             onFinished: {
-                root.detachedDrop(popoutRect.x, popoutRect.y);
+                let dropX = popoutRect.x;
+                let dropY = popoutRect.y;
                 root.isDetached = false;
+                root.isStretching = false;
+                root.isSnappingBack = false;
+                root.dragX = 0;
+                root.dragY = 0;
+                root.followDragX = 0;
+                root.followDragY = 0;
+                root.animOffsetX = 0;
+                root.animOffsetY = 0;
                 root.closeRequested();
+                root.detachedDrop(dropX, dropY);
             }
         }
 
@@ -291,8 +322,13 @@ Item {
                     if (tearHandler.active) {
                         root.dragX = tearHandler.translation.x;
                         root.dragY = tearHandler.translation.y;
+                        if (root.isDetached) {
+                            root.followDragX = root.dragX;
+                            root.followDragY = root.dragY;
+                        }
                         if (root.isStretching && tearHandler.translation.y > root.tearThreshold) {
-                            root.isStretching = false;
+                            let fadeBlur = Math.min(1.0, root.dragY / root.tearThreshold);
+                            let fadeOpacity = Math.max(0.3, 1.0 - fadeBlur);
 
                             let targetX = root.width / 2 + translation.x - popoutRect.width / 2;
                             let targetY = root.contentHeight + translation.y - popoutRect.height / 2;
@@ -302,11 +338,21 @@ Item {
 
                             root.animOffsetX = currentX - targetX;
                             root.animOffsetY = currentY - targetY;
+                            root.followDragX = root.dragX;
+                            root.followDragY = root.dragY;
 
                             root.isDetached = true;
+                            root.isStretching = false;
+
+                            detachBlurAnim.stop();
+                            detachContentOpacityAnim.stop();
+                            popoutRect.blurValue = fadeBlur;
+                            contentColumn.opacity = fadeOpacity;
 
                             snapAnimX.start();
                             snapAnimY.start();
+                            detachBlurAnim.start();
+                            detachContentOpacityAnim.start();
                         }
                         if (!root.isDetached) {
                             root.isStretching = tearHandler.translation.y > 0;
@@ -371,15 +417,15 @@ Item {
     Binding {
         target: popoutRect
         property: "x"
-        value: root.isDetached ? (root.width / 2 + root.dragX - popoutRect.width / 2 + root.animOffsetX) : (root.originX - popoutRect.width / 2)
-        when: root.isOpen && root.isSettled
+        value: root.width / 2 + root.followDragX - popoutRect.width / 2 + root.animOffsetX
+        when: root.isOpen && root.isSettled && root.isDetached
     }
 
     Binding {
         target: popoutRect
         property: "y"
-        value: root.isDetached ? (root.contentHeight + root.dragY - popoutRect.height / 2 + root.animOffsetY) : 0
-        when: root.isOpen && root.isSettled
+        value: root.contentHeight + root.followDragY - popoutRect.height / 2 + root.animOffsetY
+        when: root.isOpen && root.isSettled && root.isDetached
     }
 
     Binding {
@@ -387,13 +433,33 @@ Item {
         property: "blurValue"
         value: root.isStretching ? Math.min(1.0, root.dragY / root.tearThreshold) : 0
         when: root.isOpen && root.isSettled && !root.isDetached
+        restoreMode: Binding.RestoreNone
+    }
+
+    NumberAnimation {
+        id: detachBlurAnim
+        target: popoutRect
+        property: "blurValue"
+        to: 0
+        duration: 500
+        easing.type: Easing.OutQuad
+    }
+
+    NumberAnimation {
+        id: detachContentOpacityAnim
+        target: contentColumn
+        property: "opacity"
+        to: 1.0
+        duration: 500
+        easing.type: Easing.OutQuad
     }
 
     Binding {
         target: contentColumn
         property: "opacity"
         value: root.isStretching ? Math.max(0.3, 1.0 - (root.dragY / root.tearThreshold)) : 1.0
-        when: root.isOpen && root.isSettled
+        when: root.isOpen && root.isSettled && !root.isDetached
+        restoreMode: Binding.RestoreNone
     }
 
     Binding {

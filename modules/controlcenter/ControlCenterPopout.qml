@@ -140,7 +140,7 @@ PopoutWrapper {
                         }
 
                         QuickButton {
-                            icon: root.nightLightActive ? "\udb80\udd5f" : "\udb80\udd5e"
+                            icon: "\uf186"
                             label: "Night Light"
                             isActive: root.nightLightActive
                             onClicked: {
@@ -150,7 +150,7 @@ PopoutWrapper {
                         }
 
                         QuickButton {
-                            icon: MathState.isActive ? "\uf00c" : "\udb81\udc6a"
+                            icon: "\uf1ec"
                             label: "Math"
                             isActive: MathState.isActive
                             onClicked: root.currentPage = "math"

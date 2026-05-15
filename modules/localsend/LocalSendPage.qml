@@ -55,30 +55,6 @@ ColumnLayout {
             implicitWidth: 28
             implicitHeight: 28
             radius: 14
-            color: receiveMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : (LocalSendState.receiverRunning ? Qt.rgba(0.35, 1, 0.55, 0.12) : "transparent")
-            Behavior on color { ColorAnimation { duration: 150 } }
-
-            Text {
-                anchors.centerIn: parent
-                text: "↓"
-                color: LocalSendState.receiverRunning ? "#67ff8d" : (receiveMouse.containsMouse ? "#ffffff" : "#aaaaaa")
-                font.pixelSize: 16
-                Behavior on color { ColorAnimation { duration: 150 } }
-            }
-
-            MouseArea {
-                id: receiveMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: LocalSendState.startReceiver()
-            }
-        }
-
-        Rectangle {
-            implicitWidth: 28
-            implicitHeight: 28
-            radius: 14
             color: scanMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
             Behavior on color { ColorAnimation { duration: 150 } }
 

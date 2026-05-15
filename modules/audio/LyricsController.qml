@@ -7,6 +7,7 @@ QtObject {
     property string mediaArtist: ""
     property real mediaPosition: 0
     property var activeXhr: null
+    property bool destroyed: false
     property int currentLyricIndex: -1
     property bool manualMode: false
     property int revealedCount: 0
@@ -62,7 +63,7 @@ QtObject {
     }
 
     function abortActiveXhr() {
-        if (controller.activeXhr) {
+        if (controller && controller.activeXhr) {
             controller.activeXhr.abort();
             controller.activeXhr = null;
         }
@@ -83,6 +84,7 @@ QtObject {
         let xhr = new XMLHttpRequest();
         controller.activeXhr = xhr;
         xhr.onreadystatechange = function() {
+            if (!controller || controller.destroyed) return;
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr === controller.activeXhr) controller.activeXhr = null;
                 if (xhr.status === 200) {
@@ -149,6 +151,11 @@ QtObject {
     }
 
     onMediaPositionChanged: updateSync()
+
+    Component.onDestruction: {
+        destroyed = true;
+        abortActiveXhr();
+    }
 
     function updateSync() {
         let newIndex = -1;

@@ -11,7 +11,6 @@ Item {
     id: root
     
     property bool isActive: false
-    property var activeStandaloneWindow: null
     property bool isSpotifyOpen: MediaState.mediaPlayer === "spotify" && MediaState.mediaStatus !== "Stopped"
     property real currentWidth: isActive ? 80 : (isSpotifyOpen ? 24 : 0)
     property real blurLevel: isActive ? 0.0 : 1.0
@@ -168,16 +167,11 @@ Item {
         z: 1000
 
         onDetachedDrop: (dropX, dropY) => {
+            root.popoutOpen = false;
             const globalPos = mediaPopout.mapToGlobal(dropX, dropY);
-            let win = standaloneMediaComp.createObject(root, {
+            standaloneMediaComp.createObject(root, {
                 spawnX: globalPos.x,
                 spawnY: globalPos.y
-            });
-            root.activeStandaloneWindow = win;
-            mediaPopout.standaloneWindowActive = true;
-            win.windowDestroyed.connect(function() {
-                root.activeStandaloneWindow = null;
-                mediaPopout.standaloneWindowActive = false;
             });
         }
     }
@@ -186,7 +180,7 @@ Item {
         id: standaloneMediaComp
         StandaloneWindow {
             id: standaloneWin
-            width: 393
+            width: (standaloneLyricsCtrl.lyricsModel && standaloneLyricsCtrl.lyricsModel.count > 0) ? 780 : 393
             height: 520
 
             LyricsController {
@@ -202,134 +196,154 @@ Item {
                 color: Theme.bgPopout
                 clip: true
 
-                ColumnLayout {
+                RowLayout {
                     anchors.fill: parent
                     anchors.margins: 20
-                    spacing: 12
+                    spacing: 24
 
-                    Rectangle {
+                    ColumnLayout {
                         Layout.preferredWidth: 320
-                        Layout.preferredHeight: 320
-                        Layout.alignment: Qt.AlignHCenter
-                        radius: 12
-                        color: Theme.bgSubtle
-                        clip: true
+                        Layout.minimumWidth: 320
+                        Layout.maximumWidth: 320
+                        Layout.fillHeight: true
+                        spacing: 12
 
-                        Image {
-                            anchors.fill: parent
-                            source: MediaState.mediaArtUrl
-                            fillMode: Image.PreserveAspectCrop
-                            visible: status === Image.Ready
-                            smooth: true
+                        Rectangle {
+                            Layout.preferredWidth: 320
+                            Layout.preferredHeight: 320
+                            Layout.alignment: Qt.AlignHCenter
+                            radius: 12
+                            color: Theme.bgSubtle
+                            clip: true
+
+                            Image {
+                                anchors.fill: parent
+                                source: MediaState.mediaArtUrl
+                                fillMode: Image.PreserveAspectCrop
+                                visible: status === Image.Ready
+                                smooth: true
+                            }
                         }
-                    }
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
-
-                        Text {
-                            text: MediaState.mediaTitle || "No Media Playing"
-                            color: Theme.textPrimary
-                            font { pixelSize: 22; bold: true }
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            elide: Text.ElideRight
-                        }
+                            spacing: 2
 
-                        Text {
-                            text: MediaState.mediaArtist || "—"
-                            color: Theme.textSecondary
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.alignment: Qt.AlignHCenter
-                        spacing: 40
-
-                        Text {
-                            text: "\udb81\udcae"
-                            color: prevHoverSt.hovered ? Theme.textPrimary : Theme.textSecondary
-                            font.pixelSize: 28
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            HoverHandler { id: prevHoverSt }
-                            TapHandler { onTapped: MediaState.previous() }
-                        }
-
-                        Text {
-                            text: MediaState.mediaStatus === "Playing" ? "\udb80\udfe4" : "\udb81\udc0a"
-                            color: playHoverSt.hovered ? Theme.textPrimary : Theme.textSecondary
-                            font.pixelSize: 38
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            HoverHandler { id: playHoverSt }
-                            TapHandler { onTapped: MediaState.playPause() }
-                        }
-
-                        Text {
-                            text: "\udb81\udcad"
-                            color: nextHoverSt.hovered ? Theme.textPrimary : Theme.textSecondary
-                            font.pixelSize: 28
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            HoverHandler { id: nextHoverSt }
-                            TapHandler { onTapped: MediaState.next() }
-                        }
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 4
-
-                        Slider {
-                            Layout.fillWidth: true
-                            from: 0
-                            to: MediaState.mediaLength > 0 ? MediaState.mediaLength : 100
-                            value: pressed ? value : MediaState.mediaPosition
-                            enabled: MediaState.mediaStatus !== "Stopped"
-                            onMoved: MediaState.seek(value)
-
-                            background: Rectangle {
-                                implicitWidth: 200
-                                implicitHeight: 4
-                                height: implicitHeight
-                                radius: 2
-                                color: Theme.bgHover
-
-                                Rectangle {
-                                    width: parent.parent.visualPosition * parent.width
-                                    height: parent.height
-                                    color: Theme.textPrimary
-                                    radius: 2
-                                }
+                            Text {
+                                text: MediaState.mediaTitle || "No Media Playing"
+                                color: Theme.textPrimary
+                                font { pixelSize: 22; bold: true }
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
                             }
 
-                            handle: Rectangle {
-                                x: parent.leftPadding + parent.visualPosition * (parent.availableWidth - width)
-                                y: parent.topPadding + parent.availableHeight / 2 - height / 2
-                                implicitWidth: 10
-                                implicitHeight: 10
-                                radius: 5
-                                color: Theme.textPrimary
+                            Text {
+                                text: MediaState.mediaArtist || "—"
+                                color: Theme.textSecondary
+                                font.pixelSize: 14
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
                             }
                         }
 
                         RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: 40
+
+                            Text {
+                                text: "\udb81\udcae"
+                                color: prevHoverSt.hovered ? Theme.textPrimary : Theme.textSecondary
+                                font.pixelSize: 28
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                HoverHandler { id: prevHoverSt }
+                                TapHandler { onTapped: MediaState.previous() }
+                            }
+
+                            Text {
+                                text: MediaState.mediaStatus === "Playing" ? "\udb80\udfe4" : "\udb81\udc0a"
+                                color: playHoverSt.hovered ? Theme.textPrimary : Theme.textSecondary
+                                font.pixelSize: 38
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                HoverHandler { id: playHoverSt }
+                                TapHandler { onTapped: MediaState.playPause() }
+                            }
+
+                            Text {
+                                text: "\udb81\udcad"
+                                color: nextHoverSt.hovered ? Theme.textPrimary : Theme.textSecondary
+                                font.pixelSize: 28
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                HoverHandler { id: nextHoverSt }
+                                TapHandler { onTapped: MediaState.next() }
+                            }
+                        }
+
+                        ColumnLayout {
                             Layout.fillWidth: true
+                            spacing: 4
 
-                            Text {
-                                text: standaloneLyricsCtrl.formatTime(MediaState.mediaPosition)
-                                color: Theme.textSecondary
-                                font.pixelSize: 11
+                            Slider {
+                                Layout.fillWidth: true
+                                from: 0
+                                to: MediaState.mediaLength > 0 ? MediaState.mediaLength : 100
+                                value: pressed ? value : MediaState.mediaPosition
+                                enabled: MediaState.mediaStatus !== "Stopped"
+                                onMoved: MediaState.seek(value)
+
+                                background: Rectangle {
+                                    implicitWidth: 200
+                                    implicitHeight: 4
+                                    height: implicitHeight
+                                    radius: 2
+                                    color: Theme.bgHover
+
+                                    Rectangle {
+                                        width: parent.parent.visualPosition * parent.width
+                                        height: parent.height
+                                        color: Theme.textPrimary
+                                        radius: 2
+                                    }
+                                }
+
+                                handle: Rectangle {
+                                    x: parent.leftPadding + parent.visualPosition * (parent.availableWidth - width)
+                                    y: parent.topPadding + parent.availableHeight / 2 - height / 2
+                                    implicitWidth: 10
+                                    implicitHeight: 10
+                                    radius: 5
+                                    color: Theme.textPrimary
+                                }
                             }
 
-                            Item { Layout.fillWidth: true }
+                            RowLayout {
+                                Layout.fillWidth: true
 
-                            Text {
-                                text: standaloneLyricsCtrl.formatTime(MediaState.mediaLength)
-                                color: Theme.textSecondary
-                                font.pixelSize: 11
+                                Text {
+                                    text: standaloneLyricsCtrl.formatTime(MediaState.mediaPosition)
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 11
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Text {
+                                    text: standaloneLyricsCtrl.formatTime(MediaState.mediaLength)
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 11
+                                }
                             }
+                        }
+                    }
+
+                    LyricsPanel {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        controller: standaloneLyricsCtrl
+
+                        onSeekRequested: (time, index) => {
+                            MediaState.seek(time);
+                            MediaState.mediaPosition = time;
+                            standaloneLyricsCtrl.seekToIndex(index, time);
                         }
                     }
                 }

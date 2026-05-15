@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import "../../components"
 import "../../core"
 
@@ -39,21 +40,26 @@ ColumnLayout {
         onTriggered: notificationColumn.clearingNotifications = false
     }
 
-    RowLayout {
+    Item {
         id: notificationsHeader
         Layout.fillWidth: true
-        spacing: 8
+        height: 28
 
         AppText {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
             text: "Notifications"
             color: Theme.textPrimary
             font { pixelSize: 14; bold: true }
-            Layout.fillWidth: true
         }
 
         Rectangle {
+            id: dndToggle
+            anchors.verticalCenter: parent.verticalCenter
             implicitWidth: 124
             implicitHeight: 28
+            x: parent.width - implicitWidth - clearAllButton.opacity * (clearAllButton.implicitWidth + 8)
+
             radius: 14
             color: NotificationState.doNotDisturb ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.22) : (dndMouse.containsMouse ? Theme.bgHover : Theme.bgSubtle)
             border.color: NotificationState.doNotDisturb ? Theme.info : "transparent"
@@ -107,9 +113,22 @@ ColumnLayout {
         }
 
         Rectangle {
-            visible: notificationList.count > 0
+            id: clearAllButton
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            visible: notificationList.count > 0 || opacity > 0.01
             implicitWidth: 28
             implicitHeight: 28
+            opacity: notificationList.count > 0 ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
+
+            layer.enabled: opacity > 0 && opacity < 1
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blurMax: 48
+                blur: Math.pow(1.0 - clearAllButton.opacity, 0.6)
+            }
+
             radius: 14
             color: clearAllMouse.containsMouse ? Theme.bgHover : Theme.bgSubtle
             Behavior on color { ColorAnimation { duration: 150 } }

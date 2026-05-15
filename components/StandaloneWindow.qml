@@ -5,12 +5,8 @@ import "../core"
 Window {
     id: root
 
-    signal windowDestroyed()
-
     property real spawnX: 0
     property real spawnY: 0
-
-    Component.onDestruction: windowDestroyed()
 
     default property alias content: contentArea.data
 
@@ -23,6 +19,12 @@ Window {
     y: spawnY
     flags: Qt.FramelessWindowHint | Qt.Window
     title: "qs-media-standalone"
+
+    onClosing: {
+        close.accepted = false;
+        contentArea.opacity = 0;
+        closeTimer.start();
+    }
 
     Item {
         id: contentArea

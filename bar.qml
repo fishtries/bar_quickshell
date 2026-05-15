@@ -24,14 +24,14 @@ PanelWindow {
     anchors.top: true
     anchors.left: true
     anchors.right: true
-    // Резервируем ровно 65 пикселей для всех других окон
+    // Резервируем ровно 50 пикселей для всех других окон
     WlrLayershell.exclusiveZone: 50
 
-    // Окно всегда имеет запас высоты для попаута (оно прозрачное, так что лишнее место невидимо)
-    // exclusiveZone гарантирует, что другие окна резервируют только 65px
-    // Увеличено до 800, чтобы не обрезалось высокое меню Wi-Fi
-    implicitHeight: 800
-    
+    // Окно занимает весь экран (оно прозрачное, так что лишнее место невидимо).
+    // exclusiveZone гарантирует, что другие окна резервируют только 50px под бар.
+    // Полная высота нужна, чтобы попауты можно было тянуть в любую точку экрана.
+    implicitHeight: Math.max(800, Screen.height)
+
     color: "transparent"
     WlrLayershell.namespace: "qs-bar"
     WlrLayershell.layer: WlrLayer.Top
@@ -73,7 +73,7 @@ PanelWindow {
         Behavior on y { NumberAnimation { duration: AnimationConfig.durationModerate; easing.type: AnimationConfig.easingDefaultOut } }
 
         readonly property int bottomFadeHeight: 260
-        readonly property real availableHeight: Math.max(0, 800 - (y + topPadding) - 20)
+        readonly property real availableHeight: Math.max(0, parent.height - (y + topPadding) - 20)
         readonly property bool contentOverflows: notifCards.implicitHeight > availableHeight
         width: notifCards.implicitWidth
         height: (contentOverflows ? availableHeight : notifCards.implicitHeight) + topPadding
