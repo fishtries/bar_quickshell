@@ -10,11 +10,52 @@ Item {
 
     property var currentTransfer: IslandState.transferData
     property bool isLocalSendConfirming: root.currentTransfer && root.currentTransfer.status === "confirming"
+    property bool isDropHint: IslandState.isLocalSendDrop
+    property bool isPicker: IslandState.isLocalSendPicker
+    property var pendingFiles: IslandState.pendingSendFiles || []
+    property var devices: LocalSend.LocalSendState.devices || []
     property real islandContentOpacity: 1.0
 
-    readonly property int requestedWidth: root.isLocalSendConfirming ? 680 : 560
-    readonly property int requestedHeight: 80
-    readonly property int requestedRadius: 18
+    readonly property int pickerRowHeight: 56
+    readonly property int pickerHeaderHeight: 64
+    readonly property int pickerMaxRows: 4
+    readonly property int pickerListHeight: Math.max(pickerRowHeight, Math.min(pickerMaxRows, Math.max(1, root.devices.length)) * pickerRowHeight)
+
+    readonly property int requestedWidth: root.isDropHint ? 380 : (root.isPicker ? 560 : (root.isLocalSendConfirming ? 680 : 560))
+    readonly property int requestedHeight: root.isDropHint ? 64 : (root.isPicker ? (pickerHeaderHeight + pickerListHeight + 16) : 80)
+    readonly property int requestedRadius: root.isPicker ? 22 : 18
+
+    onIsPickerChanged: {
+        if (root.isPicker)
+            LocalSend.LocalSendState.scan()
+    }
+
+    function shortName(path) {
+        if (typeof path !== "string" || path.length === 0)
+            return ""
+        let trimmed = path
+        if (trimmed.indexOf("file://") === 0)
+            trimmed = decodeURIComponent(trimmed.substring(7))
+        let idx = trimmed.lastIndexOf("/")
+        return idx >= 0 ? trimmed.substring(idx + 1) : trimmed
+    }
+
+    function pickerSubtitle() {
+        let count = root.pendingFiles.length
+        if (count === 0)
+            return ""
+        if (count === 1)
+            return root.shortName(root.pendingFiles[0])
+        return root.shortName(root.pendingFiles[0]) + " and " + (count - 1) + " more"
+    }
+
+    function sendToDevice(device) {
+        if (!device || root.pendingFiles.length === 0)
+            return
+        let files = root.pendingFiles.slice()
+        IslandState.pendingSendFiles = []
+        LocalSend.LocalSendState.sendFiles(device, files)
+    }
 
     function clampTransferProgress() {
         let transfer = root.currentTransfer
@@ -97,7 +138,7 @@ Item {
 
         // Transfer progress UI
         RowLayout {
-            visible: !root.isLocalSendConfirming
+            visible: !root.isLocalSendConfirming && !root.isDropHint && !root.isPicker
             opacity: root.islandContentOpacity
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -243,6 +284,246 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: LocalSend.LocalSendState.confirmReceive(true)
+                }
+            }
+        }
+    }
+
+    // ─── Drop hint UI ───────────────────────────────────────────────
+    RowLayout {
+        anchors.fill: parent
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        anchors.topMargin: 12
+        anchors.bottomMargin: 12
+        spacing: 12
+        visible: root.isDropHint
+        opacity: root.isDropHint ? 1.0 : 0.0
+        scale: root.isDropHint ? 1.0 : 0.7
+        Behavior on opacity { NumberAnimation { duration: 280; easing.type: Easing.OutQuad } }
+        Behavior on scale { NumberAnimation { duration: 360; easing.type: Easing.OutBack } }
+
+        Rectangle {
+            Layout.preferredWidth: 36
+            Layout.preferredHeight: 36
+            radius: 18
+            color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.22)
+            border.width: 1
+            border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.55)
+
+            AppIcon {
+                anchors.centerIn: parent
+                text: "\uf0ee"
+                font.pixelSize: 18
+                color: Theme.info
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            spacing: 2
+
+            AppText {
+                text: "Release to send"
+                color: "#ffffff"
+                font { pixelSize: 14; weight: Font.Bold }
+            }
+            AppText {
+                text: "Drop files to share via LocalSend"
+                color: "#aaaaaa"
+                font.pixelSize: 11
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+            }
+        }
+    }
+
+    // ─── Peer picker UI ─────────────────────────────────────────────
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        anchors.topMargin: 14
+        anchors.bottomMargin: 14
+        spacing: 8
+        visible: root.isPicker
+        opacity: root.isPicker ? 1.0 : 0.0
+        scale: root.isPicker ? 1.0 : 0.7
+        Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.OutQuad } }
+        Behavior on scale { NumberAnimation { duration: 420; easing.type: Easing.OutBack } }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 12
+
+            Rectangle {
+                Layout.preferredWidth: 36
+                Layout.preferredHeight: 36
+                radius: 18
+                color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.22)
+                border.width: 1
+                border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.55)
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    text: "\uf1d8"
+                    font.pixelSize: 16
+                    color: Theme.info
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 2
+
+                AppText {
+                    text: "Send to..."
+                    color: "#ffffff"
+                    font { pixelSize: 14; weight: Font.Bold }
+                }
+                AppText {
+                    text: root.pickerSubtitle()
+                    color: "#aaaaaa"
+                    font.pixelSize: 11
+                    Layout.fillWidth: true
+                    elide: Text.ElideMiddle
+                }
+            }
+
+            Rectangle {
+                id: pickerCancelButton
+                Layout.preferredWidth: 28
+                Layout.preferredHeight: 28
+                radius: 14
+                color: pickerCancelMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.08)
+                Behavior on color { ColorAnimation { duration: 150 } }
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    text: "\uf00d"
+                    font.pixelSize: 12
+                    color: "#ffffff"
+                }
+
+                MouseArea {
+                    id: pickerCancelMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: IslandState.hide()
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.pickerListHeight
+            color: "transparent"
+
+            ListView {
+                id: peersList
+                anchors.fill: parent
+                clip: true
+                spacing: 4
+                interactive: contentHeight > height
+                model: root.devices
+
+                delegate: Rectangle {
+                    width: peersList.width
+                    height: root.pickerRowHeight - 4
+                    radius: 12
+                    color: peerMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.04)
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 12
+
+                        Rectangle {
+                            Layout.preferredWidth: 30
+                            Layout.preferredHeight: 30
+                            radius: 15
+                            color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.20)
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                text: {
+                                    let dt = (modelData.deviceType || modelData.os || "").toLowerCase()
+                                    if (dt.indexOf("mobile") >= 0 || dt.indexOf("android") >= 0 || dt.indexOf("ios") >= 0)
+                                        return "\uf3cd"
+                                    if (dt.indexOf("server") >= 0 || dt.indexOf("headless") >= 0)
+                                        return "\uf233"
+                                    return "\uf109"
+                                }
+                                font.pixelSize: 14
+                                color: Theme.info
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 1
+
+                            AppText {
+                                text: modelData.alias || modelData.name || modelData.ip || "Device"
+                                color: "#ffffff"
+                                font { pixelSize: 13; weight: Font.DemiBold }
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                            }
+                            AppText {
+                                text: (modelData.ip || "") + (modelData.deviceModel ? " · " + modelData.deviceModel : "")
+                                color: "#9a9a9a"
+                                font.pixelSize: 10
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        AppIcon {
+                            text: "\uf061"
+                            font.pixelSize: 12
+                            color: peerMouse.containsMouse ? Theme.info : "#888888"
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+                    }
+
+                    MouseArea {
+                        id: peerMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.sendToDevice(modelData)
+                    }
+                }
+            }
+
+            // Empty / scanning placeholder
+            Item {
+                anchors.fill: parent
+                visible: root.devices.length === 0
+
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    AppIcon {
+                        text: "\uf002"
+                        font.pixelSize: 18
+                        color: "#666666"
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+                    AppText {
+                        text: LocalSend.LocalSendState.devices.length === 0 ? "Searching for devices..." : ""
+                        color: "#888888"
+                        font.pixelSize: 11
+                        Layout.alignment: Qt.AlignHCenter
+                    }
                 }
             }
         }

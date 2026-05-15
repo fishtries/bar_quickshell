@@ -266,6 +266,49 @@ Rectangle {
         visible: opacity > 0
     }
 
+    // ─── LocalSend drag-and-drop target ─────────────────────────────
+    DropArea {
+        id: localSendDropArea
+        anchors.fill: parent
+        z: 200
+        enabled: !IslandState.isLocalSendTransfer && !IslandState.isLocalSendPicker
+
+        function urlsToPaths(urls) {
+            let paths = []
+            if (!urls)
+                return paths
+            for (let i = 0; i < urls.length; i++) {
+                let u = urls[i].toString()
+                if (u.indexOf("file://") === 0)
+                    u = decodeURIComponent(u.substring(7))
+                if (u.length > 0)
+                    paths.push(u)
+            }
+            return paths
+        }
+
+        onEntered: function(drag) {
+            if (drag.hasUrls && drag.urls && drag.urls.length > 0) {
+                drag.accept(Qt.CopyAction)
+                IslandState.showLocalSendDropHint()
+            }
+        }
+
+        onExited: {
+            IslandState.hideLocalSendDropHint()
+        }
+
+        onDropped: function(drop) {
+            let paths = localSendDropArea.urlsToPaths(drop.urls)
+            if (paths.length > 0) {
+                drop.accept(Qt.CopyAction)
+                IslandState.showLocalSendPicker(paths)
+            } else {
+                IslandState.hideLocalSendDropHint()
+            }
+        }
+    }
+
     // Success UI (remains inline - not part of LocalSend or Reminder)
     RowLayout {
         anchors.fill: parent

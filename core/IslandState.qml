@@ -8,20 +8,26 @@ Item {
     property string sourceModule: ""
     property var reminderData: null
     property var transferData: null
+    property var pendingSendFiles: []
 
     readonly property bool isReminder: root.sourceModule === "reminder"
-    readonly property bool isLocalSend: root.sourceModule === "localsend"
+    readonly property bool isLocalSendTransfer: root.sourceModule === "localsend"
+    readonly property bool isLocalSendDrop: root.sourceModule === "localsend-drop"
+    readonly property bool isLocalSendPicker: root.sourceModule === "localsend-picker"
+    readonly property bool isLocalSend: root.isLocalSendTransfer || root.isLocalSendDrop || root.isLocalSendPicker
     readonly property bool isAside: root.sourceModule === "aside"
 
     signal reminderAutoActionRequested(var reminder)
 
     Timer {
         id: resetTimer
-        interval: root.isReminder ? 60000 : (root.isAside ? 20000 : 5000)
+        interval: root.isReminder ? 60000 : (root.isAside ? 20000 : (root.isLocalSendPicker ? 30000 : 5000))
         onTriggered: {
             if (root.isReminder && root.reminderData) {
                 root.reminderAutoActionRequested(root.reminderData)
-            } else if (root.isLocalSend && root.transferData && root.transferData.active) {
+            } else if (root.isLocalSendTransfer && root.transferData && root.transferData.active) {
+                resetTimer.stop()
+            } else if (root.isLocalSendDrop) {
                 resetTimer.stop()
             } else {
                 root.hide()
@@ -46,6 +52,7 @@ Item {
         root.sourceModule = ""
         root.reminderData = null
         root.transferData = null
+        root.pendingSendFiles = []
     }
 
     function restart() {
@@ -91,6 +98,44 @@ Item {
             root.isActive = true
             resetTimer.restart()
         }
+    }
+
+    function showLocalSendDropHint() {
+        if (root.isLocalSendTransfer || root.isLocalSendPicker)
+            return
+
+        resetTimer.stop()
+        localSendFinishTimer.stop()
+        root.sourceModule = "localsend-drop"
+        root.reminderData = null
+        root.transferData = null
+        root.isActive = true
+    }
+
+    function hideLocalSendDropHint() {
+        if (root.isLocalSendDrop)
+            root.hide()
+    }
+
+    function showLocalSendPicker(files) {
+        let normalized = []
+        if (files instanceof Array) {
+            for (let i = 0; i < files.length; i++) {
+                if (typeof files[i] === "string" && files[i].length > 0)
+                    normalized.push(files[i])
+            }
+        }
+
+        if (normalized.length === 0)
+            return
+
+        localSendFinishTimer.stop()
+        root.pendingSendFiles = normalized
+        root.sourceModule = "localsend-picker"
+        root.reminderData = null
+        root.transferData = null
+        root.isActive = true
+        resetTimer.restart()
     }
 
     function showAside() {
