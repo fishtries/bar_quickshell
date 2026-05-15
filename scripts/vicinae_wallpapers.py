@@ -278,6 +278,179 @@ def wallpaper_luminance(path: Path) -> Optional[float]:
     return luminance_with_ffmpeg(path)
 
 
+def _rgb_to_hsv(r: float, g: float, b: float):
+    mx = max(r, g, b)
+    mn = min(r, g, b)
+    diff = mx - mn
+    if mx == 0:
+        s = 0.0
+    else:
+        s = diff / mx
+    if diff == 0:
+        h = 0.0
+    elif mx == r:
+        h = ((g - b) / diff) % 6
+    elif mx == g:
+        h = ((b - r) / diff) + 2
+    else:
+        h = ((r - g) / diff) + 4
+    return h / 6.0, s, mx
+
+
+def _hsv_to_rgb(h: float, s: float, v: float):
+    if s <= 0:
+        return v, v, v
+    h = (h % 1.0) * 6.0
+    i = int(h)
+    f = h - i
+    p = v * (1 - s)
+    q = v * (1 - s * f)
+    t = v * (1 - s * (1 - f))
+    if i == 0:
+        return v, t, p
+    if i == 1:
+        return q, v, p
+    if i == 2:
+        return p, v, t
+    if i == 3:
+        return p, q, v
+    if i == 4:
+        return t, p, v
+    return v, p, q
+
+
+def accent_from_rgb_bytes(data: bytes) -> Optional[str]:
+    if not data:
+        return None
+
+    usable = len(data) - (len(data) % 3)
+    if usable <= 0:
+        return None
+
+    # Histogram by hue (24 buckets) using saturation*value as weight.
+    buckets = 24
+    hue_weight = [0.0] * buckets
+    hue_r = [0.0] * buckets
+    hue_g = [0.0] * buckets
+    hue_b = [0.0] * buckets
+
+    for offset in range(0, usable, 3):
+        r = data[offset] / 255.0
+        g = data[offset + 1] / 255.0
+        b = data[offset + 2] / 255.0
+        h, s, v = _rgb_to_hsv(r, g, b)
+        # Skip near-grey, too dark, or blown-out pixels.
+        if s < 0.20 or v < 0.18 or v > 0.95:
+            continue
+        weight = s * v
+        idx = min(buckets - 1, int(h * buckets))
+        hue_weight[idx] += weight
+        hue_r[idx] += r * weight
+        hue_g[idx] += g * weight
+        hue_b[idx] += b * weight
+
+    best = -1
+    best_weight = 0.0
+    for idx in range(buckets):
+        if hue_weight[idx] > best_weight:
+            best_weight = hue_weight[idx]
+            best = idx
+
+    if best < 0 or best_weight <= 0:
+        return None
+
+    avg_r = hue_r[best] / best_weight
+    avg_g = hue_g[best] / best_weight
+    avg_b = hue_b[best] / best_weight
+
+    # Boost saturation/value a touch so the accent reads as vivid even
+    # when the wallpaper is muted.
+    h, s, v = _rgb_to_hsv(avg_r, avg_g, avg_b)
+    s = max(0.45, min(1.0, s * 1.25))
+    v = max(0.55, min(0.92, v * 1.05))
+    avg_r, avg_g, avg_b = _hsv_to_rgb(h, s, v)
+
+    return "#{:02x}{:02x}{:02x}".format(
+        max(0, min(255, int(round(avg_r * 255)))),
+        max(0, min(255, int(round(avg_g * 255)))),
+        max(0, min(255, int(round(avg_b * 255)))),
+    )
+
+
+def accent_with_pillow(path: Path) -> Optional[str]:
+    try:
+        from PIL import Image
+    except Exception:
+        return None
+
+    try:
+        with Image.open(path) as image:
+            try:
+                image.seek(0)
+            except EOFError:
+                pass
+            image.thumbnail((128, 128))
+            rgb_image = image.convert("RGB")
+            return accent_from_rgb_bytes(rgb_image.tobytes())
+    except Exception:
+        return None
+
+
+def accent_with_ffmpeg(path: Path) -> Optional[str]:
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        return None
+
+    try:
+        command = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+        ]
+
+        if path.suffix.lower() in VIDEO_EXTENSIONS:
+            command.extend(["-ss", "00:00:01"])
+
+        command.extend(
+            [
+                "-i",
+                str(path),
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=128:128:force_original_aspect_ratio=decrease",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgb24",
+                "-",
+            ]
+        )
+
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=6,
+        )
+    except Exception:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    return accent_from_rgb_bytes(result.stdout)
+
+
+def wallpaper_accent(path: Path) -> Optional[str]:
+    accent = accent_with_pillow(path)
+    if accent is not None:
+        return accent
+
+    return accent_with_ffmpeg(path)
+
+
 def wallpaper_luminance_profile(path: Path) -> List[float]:
     profile = luminance_profile_with_pillow(path)
     if profile:
@@ -288,11 +461,15 @@ def wallpaper_luminance_profile(path: Path) -> List[float]:
 
 def wallpaper_theme_payload(path: Optional[Path], luminance: Optional[float] = None) -> dict:
     samples = []
+    accent = None
     if path is not None and luminance is None:
         samples = wallpaper_luminance_profile(path)
         luminance = sum(samples) / len(samples) if samples else wallpaper_luminance(path)
     elif path is not None:
         samples = wallpaper_luminance_profile(path)
+
+    if path is not None:
+        accent = wallpaper_accent(path)
 
     mode = "light" if luminance is not None and luminance >= THEME_LIGHT_THRESHOLD else "dark"
     return {
@@ -300,6 +477,7 @@ def wallpaper_theme_payload(path: Optional[Path], luminance: Optional[float] = N
         "luminance": round(luminance, 4) if luminance is not None else -1,
         "samples": [round(value, 4) for value in samples],
         "wallpaper": str(path) if path is not None else "",
+        "accent": accent or "",
         "updatedAt": int(time.time()),
     }
 
@@ -316,14 +494,17 @@ def read_wallpaper_theme() -> int:
         payload = json.loads(THEME_STATE_FILE.read_text(encoding="utf-8"))
         mode = payload.get("mode")
         samples = payload.get("samples")
+        accent = payload.get("accent")
 
         if mode not in {"dark", "light"}:
             payload = wallpaper_theme_payload(None)
-        elif not isinstance(samples, list) or len(samples) == 0:
+        elif not isinstance(samples, list) or len(samples) == 0 or not accent:
             wallpaper = payload.get("wallpaper", "")
             wallpaper_path = Path(wallpaper) if wallpaper else None
             if wallpaper_path is not None and wallpaper_path.exists():
                 payload = wallpaper_theme_payload(wallpaper_path)
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                THEME_STATE_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     except Exception:
         payload = wallpaper_theme_payload(None)
 

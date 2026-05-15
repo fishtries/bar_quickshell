@@ -10,6 +10,8 @@ Item {
     property real wallpaperLuminance: -1
     property string wallpaperPath: ""
     property var wallpaperSamples: []
+    property string wallpaperAccent: ""
+    readonly property color defaultAccent: "#55ccff"
     readonly property bool isLight: colorMode === "light"
     readonly property string wallpaperScriptPath: "/home/fish/.config/quickshell/scripts/vicinae_wallpapers.py"
 
@@ -32,7 +34,9 @@ Item {
     property color success: "#55ff55"
     property color error: "#ff5555"
     property color warning: "#ffaa00"
-    property color info: "#55ccff"
+    property color info: root.wallpaperAccent !== "" ? root.wallpaperAccent : root.defaultAccent
+
+    Behavior on info { ColorAnimation { duration: 480; easing.type: Easing.InOutCubic } }
 
     // Метрики
     property int radiusPanel: 18
@@ -45,7 +49,7 @@ Item {
     property string fontClock: "MariosBlack"
     property string fontIcon: "JetBrainsMono Nerd Font"
 
-    function applyWallpaperTheme(mode, luminance, path, samples) {
+    function applyWallpaperTheme(mode, luminance, path, samples, accent) {
         root.colorMode = mode === "light" ? "light" : "dark"
 
         let numericLuminance = Number(luminance)
@@ -57,6 +61,9 @@ Item {
 
         if (samples instanceof Array)
             root.wallpaperSamples = samples
+
+        if (typeof accent === "string")
+            root.wallpaperAccent = accent
     }
 
     function itemCenterX(item) {
@@ -143,7 +150,7 @@ Item {
 
         try {
             let payload = JSON.parse(line)
-            root.applyWallpaperTheme(payload.mode, payload.luminance, payload.wallpaper, payload.samples)
+            root.applyWallpaperTheme(payload.mode, payload.luminance, payload.wallpaper, payload.samples, payload.accent)
         } catch (error) {
         }
     }
