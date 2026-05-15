@@ -86,14 +86,14 @@ Rectangle {
         NumberAnimation {
             duration: 1000
             easing.type: Easing.OutElastic
-            easing.amplitude: 0.1
-            easing.period: 0.9
+            easing.amplitude: 1
+            easing.period: 1.3
         }
     }
     Behavior on implicitHeight {
         NumberAnimation {
-            duration: 600
-            easing.type: Easing.OutElastic
+            duration: 500
+            easing.type: Easing.OutExpo
             easing.amplitude: 0.9
             easing.period: 0.8
         }

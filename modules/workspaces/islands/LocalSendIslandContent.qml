@@ -300,42 +300,15 @@ Item {
         visible: root.isDropHint
         opacity: root.isDropHint ? 1.0 : 0.0
         scale: root.isDropHint ? 1.0 : 0.7
-        Behavior on opacity { NumberAnimation { duration: 280; easing.type: Easing.OutQuad } }
-        Behavior on scale { NumberAnimation { duration: 360; easing.type: Easing.OutBack } }
+        Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.OutQuad } }
+        Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.OutBack } }
 
-        Rectangle {
-            Layout.preferredWidth: 36
-            Layout.preferredHeight: 36
-            radius: 18
-            color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.22)
-            border.width: 1
-            border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.55)
-
-            AppIcon {
-                anchors.centerIn: parent
-                text: "\uf0ee"
-                font.pixelSize: 18
-                color: Theme.info
-            }
-        }
-
-        ColumnLayout {
+        AppText {
+            text: "Wanna LocalSend?"
+            color: "#aaaaaa"
+            font.pixelSize: 11
             Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-            spacing: 2
-
-            AppText {
-                text: "Release to send"
-                color: "#ffffff"
-                font { pixelSize: 14; weight: Font.Bold }
-            }
-            AppText {
-                text: "Drop files to share via LocalSend"
-                color: "#aaaaaa"
-                font.pixelSize: 11
-                Layout.fillWidth: true
-                elide: Text.ElideRight
-            }
+            elide: Text.ElideRight
         }
     }
 
