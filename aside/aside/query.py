@@ -15,7 +15,7 @@ import socket
 import subprocess
 import threading
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import litellm
@@ -34,10 +34,24 @@ MAX_TOKENS = 4096
 MAX_TOOL_ROUNDS = 8
 MAX_TOOL_RESULT_CHARS = 20000
 FORCED_WEB_SEARCH_TOOL_ID = "forced_web_search"
+FORCED_REMINDER_TOOL_ID = "forced_reminders_create"
 WEB_SEARCH_RE = re.compile(
     r"(?:\b(?:search|find|google|web|internet|online|latest|current|today|news)\b|"
     r"найди|найти|поищи|поиск|загугли|интернет|в интернете|сети|новост|"
     r"свеж|актуальн|последн)",
+    re.IGNORECASE,
+)
+REMINDER_INTENT_RE = re.compile(
+    r"(?:напомн\w*|поставь(?:\s+мне)?\s+напомин\w*|создай(?:\s+мне)?\s+напомин\w*|добавь(?:\s+мне)?\s+напомин\w*)",
+    re.IGNORECASE,
+)
+REMINDER_DATE_RE = re.compile(r"\b(сегодня|завтра|послезавтра)\b", re.IGNORECASE)
+REMINDER_RELATIVE_RE = re.compile(
+    r"\bчерез\s+(?:(\d{1,3}|один|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять)\s+)?(пол\s*часа|полчаса|минут\w*|час\w*)\b",
+    re.IGNORECASE,
+)
+REMINDER_TIME_RE = re.compile(
+    r"(?:^|\s)(?:в|на|к)\s+(\d{1,2})(?:(?:[:.](\d{2}))|\s*(?:час(?:а|ов)?\s*)?)(утра|дня|вечера|ночи)?\b",
     re.IGNORECASE,
 )
 
@@ -252,6 +266,168 @@ def _should_force_web_search(text: str, tools: list[dict] | None, config: dict) 
     return bool(WEB_SEARCH_RE.search(text or ""))
 
 
+def _clean_forced_reminder_title(text: str) -> str:
+    title = REMINDER_RELATIVE_RE.sub(" ", text or "")
+    title = REMINDER_TIME_RE.sub(" ", title)
+    title = REMINDER_DATE_RE.sub(" ", title)
+    title = REMINDER_INTENT_RE.sub(" ", title)
+    title = re.sub(r"\b(?:мне|пожалуйста|плиз)\b", " ", title, flags=re.IGNORECASE)
+    title = re.sub(r"\b(?:о\s+том\s+что|что)\b", " ", title, flags=re.IGNORECASE)
+    title = re.sub(r"\s+", " ", title).strip(" \t\n\r,.;:!?—-")
+    if title.lower().startswith("о "):
+        title = title[2:].strip()
+    return title
+
+
+def _hour_with_period(hour: int, period: str | None) -> int | None:
+    if not 0 <= hour <= 23:
+        return None
+    current_period = (period or "").lower().replace("ё", "е")
+    if current_period == "утра":
+        return 0 if hour == 12 else hour
+    if current_period in {"дня", "вечера"}:
+        return hour if hour >= 12 else hour + 12
+    if current_period == "ночи":
+        if hour == 12:
+            return 0
+        return hour if hour <= 5 else hour + 12 if hour < 12 else hour
+    return hour
+
+
+def _relative_amount(value: str | None) -> int:
+    if value is None or not str(value).strip():
+        return 1
+    text = str(value).strip().lower().replace("ё", "е")
+    if text.isdigit():
+        return int(text)
+    return {
+        "один": 1,
+        "одну": 1,
+        "два": 2,
+        "две": 2,
+        "три": 3,
+        "четыре": 4,
+        "пять": 5,
+        "шесть": 6,
+        "семь": 7,
+        "восемь": 8,
+        "девять": 9,
+        "десять": 10,
+    }.get(text, 1)
+
+
+def _parse_forced_reminder_create(text: str, config: dict) -> dict | None:
+    tools_cfg = config.get("tools", {})
+    if tools_cfg.get("force_reminders", True) is False:
+        return None
+    if not REMINDER_INTENT_RE.search(text or ""):
+        return None
+
+    now = datetime.now()
+    relative_match = REMINDER_RELATIVE_RE.search(text or "")
+    if relative_match:
+        amount = _relative_amount(relative_match.group(1))
+        unit = relative_match.group(2).lower().replace(" ", "")
+        if unit == "полчаса":
+            target = now + timedelta(minutes=30)
+        else:
+            target = now + (timedelta(hours=amount) if unit.startswith("час") else timedelta(minutes=amount))
+        title = _clean_forced_reminder_title(text)
+        if not title:
+            return None
+        return {
+            "action": "create",
+            "title": title,
+            "date": target.date().isoformat(),
+            "time": target.strftime("%H:%M"),
+            "list_name": tools_cfg.get("reminders_default_list", "Reminders"),
+        }
+
+    time_match = REMINDER_TIME_RE.search(text or "")
+    if not time_match:
+        return None
+    hour = _hour_with_period(int(time_match.group(1)), time_match.group(3))
+    if hour is None:
+        return None
+    minute = int(time_match.group(2) or 0)
+    if not 0 <= minute <= 59:
+        return None
+
+    date_match = REMINDER_DATE_RE.search(text or "")
+    if date_match:
+        word = date_match.group(1).lower().replace("ё", "е")
+        offset = {"сегодня": 0, "завтра": 1, "послезавтра": 2}[word]
+        target_date = (now.date() + timedelta(days=offset))
+    else:
+        candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        target_date = (candidate if candidate > now else candidate + timedelta(days=1)).date()
+
+    title = _clean_forced_reminder_title(text)
+    if not title:
+        return None
+    return {
+        "action": "create",
+        "title": title,
+        "date": target_date.isoformat(),
+        "time": f"{hour:02d}:{minute:02d}",
+        "list_name": tools_cfg.get("reminders_default_list", "Reminders"),
+    }
+
+
+def _should_force_reminder_create(text: str, tools: list[dict] | None, config: dict) -> bool:
+    if not _tool_available(tools, "reminders"):
+        return False
+    return _parse_forced_reminder_create(text, config) is not None
+
+
+def _tool_action(arguments: dict) -> str:
+    return str(arguments.get("action") or "").strip().lower()
+
+
+def _requires_tool_confirmation(name: str, arguments: dict, config: dict) -> bool:
+    tools_cfg = config.get("tools", {})
+    if tools_cfg.get("confirm_actions", True) is False:
+        return False
+    if name != "reminders":
+        return False
+    return _tool_action(arguments) in {
+        "create",
+        "update",
+        "set",
+        "add",
+        "edit",
+        "change",
+        "move",
+        "reschedule",
+    }
+
+
+def _tool_confirmation_prompt(name: str, arguments: dict) -> str:
+    action = _tool_action(arguments)
+    if name == "reminders" and action in {"create", "set", "add"}:
+        title = str(arguments.get("title") or "напоминание").strip()
+        date = str(arguments.get("date") or "").strip()
+        time_value = str(arguments.get("time") or "").strip()
+        when = " ".join(part for part in [date, time_value] if part)
+        return f"Подтвердить создание напоминания: {title} — {when}?"
+    if name == "reminders":
+        target = str(arguments.get("old_title") or arguments.get("query") or "выбранное напоминание").strip()
+        changes = []
+        for key, label in (
+            ("new_title", "текст"),
+            ("new_date", "дату"),
+            ("new_time", "время"),
+            ("new_list_name", "список"),
+        ):
+            value = str(arguments.get(key) or "").strip()
+            if value:
+                changes.append(f"{label}: {value}")
+        change_text = ", ".join(changes) if changes else "изменить параметры"
+        return f"Подтвердить изменение напоминания: {target}; {change_text}?"
+    rendered = json.dumps(arguments, ensure_ascii=False, default=str)
+    return f"Подтвердить действие {name}: {rendered}?"
+
+
 def _with_no_think(messages: list[dict], model: str, disable: bool) -> list[dict]:
     if not disable or not model.startswith("ollama/"):
         return messages
@@ -294,6 +470,16 @@ def _content_to_text(content: object) -> str:
     return str(content)
 
 
+def _normalize_messages_for_model(messages: list[dict]) -> list[dict]:
+    normalized: list[dict] = []
+    for message in messages:
+        copied = dict(message)
+        if copied.get("content") is None:
+            copied["content"] = ""
+        normalized.append(copied)
+    return normalized
+
+
 def _ollama_messages_to_text(messages: list[dict]) -> list[dict]:
     converted: list[dict] = []
     for message in messages:
@@ -316,9 +502,14 @@ def _ollama_messages_to_text(messages: list[dict]) -> list[dict]:
     return converted
 
 
-def _prepare_messages_for_model(messages: list[dict], model: str, disable_thinking: bool) -> list[dict]:
-    prepared = _with_no_think(messages, model, disable_thinking)
-    if model.startswith("ollama/"):
+def _prepare_messages_for_model(
+    messages: list[dict],
+    model: str,
+    disable_thinking: bool,
+    tools_enabled: bool = False,
+) -> list[dict]:
+    prepared = _with_no_think(_normalize_messages_for_model(messages), model, disable_thinking)
+    if model.startswith("ollama/") and not tools_enabled:
         converted = _ollama_messages_to_text(prepared)
         if disable_thinking and converted and "/no_think" not in converted[-1]["content"]:
             converted[-1]["content"] = converted[-1]["content"].rstrip() + "\n\n/no_think"
@@ -516,7 +707,7 @@ def stream_response(
     usage = {"model": model, "input_tokens": 0, "output_tokens": 0}
     open_sent = deferred_open is None  # True if no deferred open needed
 
-    if ollama_fast_path and model.startswith("ollama/"):
+    if ollama_fast_path and model.startswith("ollama/") and not tools:
         response_stream = _ollama_generate_stream(
             model=model,
             messages=messages,
@@ -660,6 +851,7 @@ def send_query(
     plugin_dirs: list[Path] | None = None,
     tools: list[dict] | None = None,
     from_mic: bool = False,
+    confirm_tool=None,
 ) -> str | None:
     """Send text to an LLM.  The single entry point for all query paths.
 
@@ -789,6 +981,69 @@ def send_query(
     ollama_think = False if disable_thinking else model_config.get("ollama_think")
 
     try:
+        forced_reminder_args = (
+            _parse_forced_reminder_create(text, config)
+            if _tool_available(tools, "reminders")
+            else None
+        )
+        if forced_reminder_args and not (cancel_event and cancel_event.is_set()):
+            if deferred_open:
+                _overlay_send(overlay_sock, deferred_open)
+                deferred_open = None
+
+            conv["messages"].append({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{
+                    "id": FORCED_REMINDER_TOOL_ID,
+                    "type": "function",
+                    "function": {
+                        "name": "reminders",
+                        "arguments": json.dumps(forced_reminder_args),
+                    },
+                }],
+            })
+            store.write_transcript(conv)
+
+            confirmed = True
+            if _requires_tool_confirmation("reminders", forced_reminder_args, config):
+                prompt = _tool_confirmation_prompt("reminders", forced_reminder_args)
+                if full_text:
+                    full_text += "\n\n"
+                full_text += prompt + "\n\n"
+                _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
+                status.set_status("tool_use", tool_name="confirm")
+                confirmed = bool(confirm_tool and confirm_tool("reminders", forced_reminder_args, prompt))
+                if speak_on and tts is not None and not getattr(tts, "_running", False):
+                    tts.start()
+
+            if confirmed:
+                log.info("Executing forced tool: reminders")
+                status.set_status("tool_use", tool_name="reminders")
+                result = run_tool("reminders", forced_reminder_args, dirs)
+                conv["messages"].append({
+                    "role": "tool",
+                    "tool_call_id": FORCED_REMINDER_TOOL_ID,
+                    "content": _format_tool_result(result),
+                })
+                if full_text:
+                    full_text += "\n\n"
+                full_text += "reminders\n\n"
+            else:
+                conv["messages"].append({
+                    "role": "tool",
+                    "tool_call_id": FORCED_REMINDER_TOOL_ID,
+                    "content": "Action cancelled by user.",
+                })
+
+            store.write_transcript(conv)
+            _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
+            _overlay_send(overlay_sock, {"cmd": "thinking"})
+            if speak_on and tts is not None and tts._running:
+                status.set_status("speaking")
+            else:
+                status.set_status("thinking")
+
         if (
             _should_force_web_search(text, tools, config)
             and not (cancel_event and cancel_event.is_set())
@@ -803,7 +1058,7 @@ def send_query(
             }
             conv["messages"].append({
                 "role": "assistant",
-                "content": None,
+                "content": "",
                 "tool_calls": [{
                     "id": FORCED_WEB_SEARCH_TOOL_ID,
                     "type": "function",
@@ -843,7 +1098,12 @@ def send_query(
             )
             # Remove the empty trailing user message that _build_messages appends.
             messages.pop()
-            messages = _prepare_messages_for_model(messages, model, disable_thinking)
+            messages = _prepare_messages_for_model(
+                messages,
+                model,
+                disable_thinking,
+                tools_enabled=bool(tools),
+            )
 
             resp_text, tool_calls, usage = stream_response(
                 model=model,
@@ -888,9 +1148,6 @@ def send_query(
                     }
                     for tc in tool_calls
                 ]
-                # OpenAI format: when there are tool_calls, content can be null.
-                if not resp_text:
-                    assistant_msg["content"] = None
             conv["messages"].append(assistant_msg)
             store.write_transcript(conv)
 
@@ -916,6 +1173,25 @@ def send_query(
             for tc in tool_calls:
                 if cancel_event and cancel_event.is_set():
                     break
+                if _requires_tool_confirmation(tc["name"], tc["arguments"], config):
+                    prompt = _tool_confirmation_prompt(tc["name"], tc["arguments"])
+                    if full_text:
+                        full_text += "\n\n"
+                    full_text += prompt + "\n\n"
+                    _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
+                    status.set_status("tool_use", tool_name="confirm")
+                    confirmed = bool(confirm_tool and confirm_tool(tc["name"], tc["arguments"], prompt))
+                    if speak_on and tts is not None and not getattr(tts, "_running", False):
+                        tts.start()
+                    if not confirmed:
+                        result = "Action cancelled by user."
+                        conv["messages"].append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": result,
+                        })
+                        continue
+
                 log.info("Executing tool: %s", tc["name"])
                 status.set_status("tool_use", tool_name=tc["name"])
                 result = run_tool(tc["name"], tc["arguments"], dirs)

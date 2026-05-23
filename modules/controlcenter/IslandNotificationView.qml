@@ -252,6 +252,7 @@ Item {
                 anchors.leftMargin: 14
                 anchors.rightMargin: 14
                 spacing: 10
+                clip: true
 
                 opacity: root.notifExpanded ? 0.0 : 1.0
                 scale: root.notifExpanded ? 0.8 : 1.0
@@ -291,8 +292,10 @@ Item {
 
                 Item {
                     Layout.fillWidth: true
+                    Layout.fillHeight: true
                     Layout.alignment: Qt.AlignVCenter
-                    implicitHeight: compactTextCol.implicitHeight
+                    implicitHeight: Math.min(compactTextCol.implicitHeight, Math.max(0, compactView.height))
+                    clip: true
                     layer.enabled: root.notifBlur > 0
                     layer.effect: MultiEffect {
                         blurEnabled: true
@@ -309,6 +312,8 @@ Item {
                             color: "#ffffff"
                             font { pixelSize: 14; weight: Font.DemiBold }
                             elide: Text.ElideRight
+                            wrapMode: Text.NoWrap
+                            maximumLineCount: 1
                             Layout.fillWidth: true
                         }
 
@@ -317,6 +322,8 @@ Item {
                             color: "#cccccc"
                             font.pixelSize: 11
                             elide: Text.ElideRight
+                            wrapMode: Text.NoWrap
+                            maximumLineCount: 1
                             Layout.fillWidth: true
                             visible: text !== ""
                         }

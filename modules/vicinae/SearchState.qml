@@ -43,6 +43,13 @@ Item {
     property string statusMessage: ""
     property string wallpaperStatusMessage: ""
     property string clipboardStatusMessage: ""
+    property bool wallpaperRandomizing: false
+    property var wallpaperRandomFinalItem: null
+    property real wallpaperRandomEndTime: 0
+    property var wallpaperRouletteItems: []
+    property int wallpaperRouletteWinnerIndex: -1
+    property int wallpaperRouletteRevision: 0
+    readonly property int wallpaperRandomDuration: 2000
     readonly property string catalogScriptPath: "/home/fish/.config/quickshell/scripts/vicinae_catalog.py"
     readonly property string fileSearchScriptPath: "/home/fish/.config/quickshell/scripts/vicinae_file_search.py"
     readonly property string usageScriptPath: "/home/fish/.config/quickshell/scripts/vicinae_usage.py"
@@ -175,17 +182,17 @@ Item {
     ]
     property alias resultsModel: resultsModel
     property alias clipboardModel: clipboardModel
-    readonly property int resultCount: clipboardMode ? clipboardModel.count : selectableCount()
+    readonly property int resultCount: clipboardMode ? clipboardModel.count : wallpaperMode ? wallpaperSelectableCount() : selectableCount()
     readonly property var currentItem: selectedIndex >= 0 && selectedIndex < resultsModel.count ? resultsModel.get(selectedIndex) : null
     readonly property var selectedClipboardItem: clipboardPreviewRevision >= 0 && selectedClipboardIndex >= 0 && selectedClipboardIndex < clipboardModel.count ? clipboardModel.get(selectedClipboardIndex) : null
     readonly property bool currentItemFavorite: !clipboardMode && !wallpaperMode && currentItem && currentItem.selectable ? isFavoriteItem(currentItem) : false
-    readonly property string primaryActionLabel: clipboardMode ? (selectedClipboardItem ? "Paste" : "") : currentItem && currentItem.selectable ? currentItem.actionLabel || "Open" : ""
+    readonly property string primaryActionLabel: clipboardMode ? (selectedClipboardItem ? "Paste" : "") : wallpaperRandomizing ? "" : currentItem && currentItem.selectable ? currentItem.actionLabel || "Open" : ""
     readonly property string secondaryActionLabel: clipboardMode ? (selectedClipboardItem ? "Copy" : "") : !wallpaperMode && currentItem && currentItem.selectable ? (currentItemFavorite ? "Unfavorite" : "Favorite") : ""
     readonly property string secondaryActionShortcut: clipboardMode ? "Ctrl B" : "Ctrl D"
     readonly property string escapeActionLabel: clipboardMode || wallpaperMode ? "Back" : "Close"
     readonly property string resultSummary: resultCount === 0 ? "No results" : resultCount === 1 ? "1 result" : resultCount + " results"
     readonly property string clipboardSummary: clipboardModel.count === 0 ? "No clipboard items" : clipboardModel.count === 1 ? "1 clipboard item" : clipboardModel.count + " clipboard items"
-    readonly property string wallpaperSummary: resultCount === 0 ? "No wallpapers" : resultCount === 1 ? "1 wallpaper" : resultCount + " wallpapers"
+    readonly property string wallpaperSummary: wallpaperRandomizing ? "Rolling random wallpaper..." : resultCount === 0 ? (resultsModel.count > 0 ? "Random wallpaper" : "No wallpapers") : resultCount === 1 ? "1 wallpaper" : resultCount + " wallpapers"
     readonly property string footerStatus: clipboardMode ? (loadingClipboard ? "Loading clipboard history..." : loadingClipboardPreview ? "Loading preview..." : clipboardStatusMessage !== "" ? clipboardStatusMessage : clipboardSummary) : wallpaperMode ? (loadingWallpapers ? "Loading wallpapers..." : wallpaperStatusMessage !== "" ? wallpaperStatusMessage : wallpaperSummary) : loadingCatalog ? "Loading applications..." : loadingUsage ? "Loading usage history..." : loadingFavorites ? "Loading favorites..." : loadingFiles ? "Searching files..." : statusMessage !== "" ? statusMessage : resultSummary
 
     signal resultActivated(var item)
@@ -444,6 +451,8 @@ Item {
                 "launchType": item.launchType || "",
                 "launchValue": item.launchValue || "",
                 "launchKey": item.launchKey || "",
+                "previewPath": item.previewPath || "",
+                "isVideo": item.isVideo === true,
                 "calcQuestion": item.calcQuestion || "",
                 "calcQuestionUnit": item.calcQuestionUnit || "",
                 "calcAnswer": item.calcAnswer || "",
@@ -703,6 +712,7 @@ Item {
         if (wallpaperLoader.running)
             wallpaperLoader.running = false
 
+        stopWallpaperRandomAnimation()
         wallpaperMode = false
         loadingWallpapers = false
         wallpaperStatusMessage = ""
@@ -766,6 +776,54 @@ Item {
         return stringContainsToken(combined, token) ? 1 : -1
     }
 
+    function buildRandomWallpaperItem() {
+        return {
+            "section": "Wallpapers",
+            "kind": "result",
+            "title": "Random Wallpaper",
+            "subtitle": "Shuffle wallpapers for 2 seconds",
+            "iconText": "󰒟",
+            "iconName": "",
+            "isVideo": false,
+            "previewPath": "",
+            "accessoryText": "Random",
+            "accessoryColor": "#b8a1ff",
+            "aliasText": "random",
+            "keywords": ["random", "shuffle", "wallpaper", "wallpapers", "случайные", "рандом", "обои", "фон"],
+            "actionLabel": "Random Wallpaper",
+            "launchType": "wallpaperRandom",
+            "launchValue": "",
+            "launchKey": "wallpaper:random"
+        }
+    }
+
+    function appendWallpaperItem(item) {
+        resultsModel.append({
+            "isSection": false,
+            "selectable": true,
+            "kind": item.kind || "result",
+            "sectionName": item.section || "Wallpapers",
+            "title": item.title || "",
+            "subtitle": item.subtitle || "",
+            "iconText": item.iconText || "󰋩",
+            "iconName": item.iconName || "",
+            "accessoryText": item.accessoryText || "",
+            "accessoryColor": item.accessoryColor || "#b8a1ff",
+            "aliasText": item.aliasText || "",
+            "isActive": item.isActive === true,
+            "actionLabel": item.actionLabel || "Set Wallpaper",
+            "launchType": item.launchType || "",
+            "launchValue": item.launchValue || "",
+            "launchKey": item.launchKey || "",
+            "previewPath": item.previewPath || "",
+            "isVideo": item.isVideo === true,
+            "calcQuestion": "",
+            "calcQuestionUnit": "",
+            "calcAnswer": "",
+            "calcAnswerUnit": ""
+        })
+    }
+
     function replaceWallpaperItems(items) {
         wallpaperItems = items || []
         rebuildWallpaperResults()
@@ -793,35 +851,179 @@ Item {
 
         resultsModel.clear()
 
+        if (wallpaperItems.length > 0) {
+            const randomItem = buildRandomWallpaperItem()
+            appendWallpaperItem(randomItem)
+        }
+
         for (let j = 0; j < source.length; j++) {
             const item = source[j].item
-            resultsModel.append({
-                "isSection": false,
-                "selectable": true,
-                "kind": item.kind || "result",
-                "sectionName": item.section || "Wallpapers",
-                "title": item.title || "",
-                "subtitle": item.subtitle || "",
-                "iconText": item.iconText || "󰋩",
-                "iconName": item.iconName || "",
-                "accessoryText": item.accessoryText || "",
-                "accessoryColor": item.accessoryColor || "#b8a1ff",
-                "aliasText": item.aliasText || "",
-                "isActive": item.isActive === true,
-                "actionLabel": item.actionLabel || "Set Wallpaper",
-                "launchType": item.launchType || "",
-                "launchValue": item.launchValue || "",
-                "launchKey": item.launchKey || "",
-                "previewPath": item.previewPath || "",
-                "isVideo": item.isVideo === true,
-                "calcQuestion": "",
-                "calcQuestionUnit": "",
-                "calcAnswer": "",
-                "calcAnswerUnit": ""
-            })
+            appendWallpaperItem(item)
         }
 
         selectedIndex = nextSelectableIndex(-1, 1)
+    }
+
+    function wallpaperSelectableCount() {
+        let count = 0
+
+        for (let i = 0; i < resultsModel.count; i++) {
+            const item = resultsModel.get(i)
+
+            if (item && item.selectable && item.launchType === "wallpaper" && item.launchValue !== "")
+                count++
+        }
+
+        return count
+    }
+
+    function wallpaperResultIndexes() {
+        const indexes = []
+
+        for (let i = 0; i < resultsModel.count; i++) {
+            const item = resultsModel.get(i)
+
+            if (item && item.selectable && item.launchType === "wallpaper" && item.launchValue !== "")
+                indexes.push(i)
+        }
+
+        return indexes
+    }
+
+    function wallpaperResultSnapshots() {
+        const items = []
+
+        for (let i = 0; i < resultsModel.count; i++) {
+            const item = resultsModel.get(i)
+
+            if (item && item.selectable && item.launchType === "wallpaper" && item.launchValue !== "")
+                items.push(snapshotItem(item))
+        }
+
+        return items
+    }
+
+    function randomWallpaperSnapshot(items) {
+        if (!items || items.length === 0)
+            return null
+
+        return snapshotItem(items[Math.floor(Math.random() * items.length)])
+    }
+
+    function buildWallpaperRouletteItems(items, winnerItem) {
+        if (!items || items.length === 0 || !winnerItem)
+            return false
+
+        const winnerIndex = 34
+        const totalCount = winnerIndex + 8
+        const rouletteItems = []
+
+        for (let i = 0; i < totalCount; i++)
+            rouletteItems.push(i === winnerIndex ? snapshotItem(winnerItem) : randomWallpaperSnapshot(items))
+
+        wallpaperRouletteItems = rouletteItems
+        wallpaperRouletteWinnerIndex = winnerIndex
+        wallpaperRouletteRevision += 1
+        return true
+    }
+
+    function wallpaperIndexForLaunchValue(launchValue) {
+        for (let i = 0; i < resultsModel.count; i++) {
+            const item = resultsModel.get(i)
+
+            if (item && item.launchType === "wallpaper" && item.launchValue === launchValue)
+                return i
+        }
+
+        return -1
+    }
+
+    function applyWallpaperLaunchItem(item, closeAfter) {
+        if (!item || item.launchType !== "wallpaper" || !item.launchValue)
+            return false
+
+        stopWallpaperRandomAnimation()
+        wallpaperApplyProcess.command = ["python3", wallpaperScriptPath, "apply", item.launchValue]
+        wallpaperApplyProcess.running = true
+        resultActivated(item)
+        registerItemUsage(item)
+
+        if (closeAfter)
+            closeRequested()
+
+        return true
+    }
+
+    function stopWallpaperRandomAnimation() {
+        wallpaperRandomTimer.stop()
+        wallpaperRandomizing = false
+        wallpaperRandomFinalItem = null
+        wallpaperRandomEndTime = 0
+        wallpaperRouletteItems = []
+        wallpaperRouletteWinnerIndex = -1
+    }
+
+    function finishWallpaperRandomAnimation() {
+        const finalItem = wallpaperRandomFinalItem
+
+        wallpaperRandomTimer.stop()
+        wallpaperRandomEndTime = 0
+
+        if (!wallpaperMode || !finalItem || !finalItem.launchValue) {
+            stopWallpaperRandomAnimation()
+            return
+        }
+
+        wallpaperStatusMessage = ""
+        if (!applyWallpaperLaunchItem(finalItem, true))
+            stopWallpaperRandomAnimation()
+    }
+
+    function advanceWallpaperRandomAnimation() {
+        if (!wallpaperRandomizing)
+            return
+
+        if (!wallpaperMode) {
+            stopWallpaperRandomAnimation()
+            return
+        }
+
+        finishWallpaperRandomAnimation()
+    }
+
+    function startWallpaperRandomAnimation(launchItem) {
+        if (wallpaperRandomizing)
+            return true
+
+        let rouletteSource = wallpaperResultSnapshots()
+
+        if (rouletteSource.length === 0 && wallpaperItems.length > 0) {
+            query = ""
+            rebuildWallpaperResults()
+            rouletteSource = wallpaperResultSnapshots()
+        }
+
+        if (rouletteSource.length === 0) {
+            wallpaperStatusMessage = "No wallpapers available"
+            return false
+        }
+
+        const finalItem = randomWallpaperSnapshot(rouletteSource)
+
+        if (!buildWallpaperRouletteItems(rouletteSource, finalItem)) {
+            wallpaperStatusMessage = "No wallpapers available"
+            return false
+        }
+
+        wallpaperRandomizing = true
+        wallpaperRandomFinalItem = finalItem
+        wallpaperRandomEndTime = Date.now() + wallpaperRandomDuration
+        wallpaperStatusMessage = "Rolling random wallpaper..."
+        resultActivated(launchItem)
+        registerItemUsage(launchItem)
+        wallpaperRandomTimer.interval = wallpaperRandomDuration
+        wallpaperRandomTimer.restart()
+        return true
     }
 
     function refreshClipboardHistory() {
@@ -1121,6 +1323,9 @@ Item {
     }
 
     function handleWallpaperKeyPress(key, modifiers) {
+        if (wallpaperRandomizing && key !== Qt.Key_Escape)
+            return true
+
         switch (key) {
         case Qt.Key_Up:
             moveWallpaperSelection(-3)
@@ -1191,13 +1396,12 @@ Item {
             return true
         }
 
+        if (launchType === "wallpaperRandom") {
+            return startWallpaperRandomAnimation(launchItem)
+        }
+
         if (launchType === "wallpaper" && launchValue) {
-            wallpaperApplyProcess.command = ["python3", wallpaperScriptPath, "apply", launchValue]
-            wallpaperApplyProcess.running = true
-            resultActivated(launchItem)
-            registerItemUsage(launchItem)
-            closeRequested()
-            return true
+            return applyWallpaperLaunchItem(launchItem, true)
         }
 
         if (launchType === "copy") {
@@ -1318,6 +1522,9 @@ Item {
     }
 
     function selectIndex(index) {
+        if (wallpaperMode && wallpaperRandomizing)
+            return
+
         if (index < 0 || index >= resultsModel.count) {
             selectedIndex = -1
             return
@@ -1374,6 +1581,9 @@ Item {
     }
 
     function activateIndex(index) {
+        if (wallpaperMode && wallpaperRandomizing)
+            return true
+
         if (index < 0 || index >= resultsModel.count)
             return false
 
@@ -1424,6 +1634,9 @@ Item {
         }
 
         if (wallpaperMode) {
+            if (wallpaperRandomizing)
+                return
+
             wallpaperStatusMessage = ""
             query = value
             rebuildWallpaperResults()
@@ -1637,6 +1850,12 @@ Item {
         interval: 220
         repeat: false
         onTriggered: root.startFileSearch(root.pendingFileSearchQuery)
+    }
+
+    Timer {
+        id: wallpaperRandomTimer
+        repeat: false
+        onTriggered: root.advanceWallpaperRandomAnimation()
     }
 
     Process {

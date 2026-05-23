@@ -106,6 +106,44 @@ except (ImportError, RuntimeError):
 
 
 _WAKE_WORD_RE = re.compile(r"[^0-9a-zа-я]+", re.IGNORECASE)
+_CONFIRM_YES_PHRASES = [
+    "да",
+    "ага",
+    "угу",
+    "ок",
+    "окей",
+    "подтверждаю",
+    "подтвердить",
+    "согласен",
+    "верно",
+    "делай",
+    "ставь",
+    "создай",
+    "изменяй",
+    "yes",
+    "yeah",
+    "yep",
+    "confirm",
+    "approve",
+]
+_CONFIRM_NO_PHRASES = [
+    "нет",
+    "не надо",
+    "не нужно",
+    "отмена",
+    "отмени",
+    "отменить",
+    "отбой",
+    "стоп",
+    "не ставь",
+    "не создавай",
+    "не изменяй",
+    "no",
+    "nope",
+    "cancel",
+    "deny",
+    "stop",
+]
 
 
 def _normalize_wake_text(text: str) -> str:
@@ -124,6 +162,25 @@ def _extract_wake_command(text: str, phrases: list[str]) -> str | None:
         match = re.search(rf"(?:^|\s){re.escape(wake)}(?:\s|$)", normalized)
         if match:
             return normalized[match.end():].strip()
+    return None
+
+
+def _has_confirmation_phrase(text: str, phrases: list[str]) -> bool:
+    normalized = f" {_normalize_wake_text(text)} "
+    if not normalized.strip():
+        return False
+    for phrase in phrases:
+        needle = f" {_normalize_wake_text(str(phrase))} "
+        if needle.strip() and needle in normalized:
+            return True
+    return False
+
+
+def _parse_confirmation_response(text: str, yes_phrases: list[str], no_phrases: list[str]) -> bool | None:
+    if _has_confirmation_phrase(text, no_phrases):
+        return False
+    if _has_confirmation_phrase(text, yes_phrases):
+        return True
     return None
 
 
@@ -270,6 +327,7 @@ class Daemon:
                     plugin_dirs=self.tools_dirs,
                     tools=self._get_tools(),
                     from_mic=from_mic,
+                    confirm_tool=self._confirm_tool_action,
                 )
                 if result_id:
                     self.last_conv_id = result_id
@@ -290,6 +348,7 @@ class Daemon:
                         plugin_dirs=self.tools_dirs,
                         tools=self._get_tools(),
                         from_mic=from_mic,
+                        confirm_tool=self._confirm_tool_action,
                     )
                     if result_id:
                         self.last_conv_id = result_id
@@ -324,6 +383,78 @@ class Daemon:
                 self._mic_cancel.set()
         if self.tts is not None:
             self.tts.stop()
+
+    def _confirmation_capture_config(self) -> dict:
+        cfg = dict(self.config.get("voice", {}))
+        cfg["max_capture_seconds"] = cfg.get("confirm_max_capture_seconds", 8)
+        cfg["no_speech_timeout"] = cfg.get("confirm_no_speech_timeout", 3.0)
+        cfg["silence_timeout"] = cfg.get("confirm_silence_timeout", 1.0)
+        cfg["smart_silence"] = False
+        cfg["force_send_phrases"] = []
+        return cfg
+
+    def _confirm_tool_action(self, tool_name: str, arguments: dict, prompt: str) -> bool:
+        if capture_one_shot is None:
+            log.warning("Tool confirmation rejected: STT not installed")
+            return False
+
+        tools_cfg = self.config.get("tools", {})
+        yes_phrases = [str(p) for p in tools_cfg.get("confirm_yes_phrases", _CONFIRM_YES_PHRASES)]
+        no_phrases = [str(p) for p in tools_cfg.get("confirm_no_phrases", _CONFIRM_NO_PHRASES)]
+        cancel = threading.Event()
+
+        if self.tts is not None:
+            try:
+                self.tts.stop()
+                if tools_cfg.get("confirm_tts", True):
+                    self.tts.start()
+                    self.tts.speak(prompt + " Скажи да или нет.")
+                    self.tts.finish()
+                    self.tts.wait_done(timeout=20)
+                    self.tts.stop()
+            except Exception:
+                log.exception("Tool confirmation TTS failed")
+
+        from aside.query import _connect_overlay, _overlay_send, _overlay_close
+
+        overlay_sock = _connect_overlay()
+        try:
+            _overlay_send(overlay_sock, {"cmd": "replace", "data": prompt + "\n\nСкажи «да» или «нет»."})
+            _overlay_send(overlay_sock, {"cmd": "listening"})
+
+            def on_interim(text):
+                _overlay_send(overlay_sock, {
+                    "cmd": "replace",
+                    "data": prompt + "\n\nСлушаю: " + text,
+                })
+
+            def on_audio_level(level):
+                _overlay_send(overlay_sock, {
+                    "cmd": "audio_level",
+                    "data": level,
+                })
+
+            with self._cancel_lock:
+                self._mic_cancel = cancel
+            with self._voice_lock:
+                text = capture_one_shot(
+                    self._confirmation_capture_config(),
+                    on_interim=on_interim,
+                    on_audio_level=on_audio_level,
+                    cancel_event=cancel,
+                )
+        except Exception:
+            log.exception("Tool confirmation capture failed")
+            return False
+        finally:
+            with self._cancel_lock:
+                if self._mic_cancel is cancel:
+                    self._mic_cancel = None
+            _overlay_close(overlay_sock)
+
+        decision = _parse_confirmation_response(text or "", yes_phrases, no_phrases)
+        log.info("Tool confirmation for %s: %r -> %s", tool_name, text, decision)
+        return decision is True
 
     def _wake_capture_config(self) -> dict:
         cfg = dict(self.config.get("voice", {}))

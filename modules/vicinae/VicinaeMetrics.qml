@@ -22,7 +22,23 @@ QtObject {
     readonly property real contentGap: 10
     readonly property real normalContentHeight: Math.max(280, Math.min(450, height - 180))
     readonly property real clipboardContentHeight: Math.max(430, Math.min(560, height - 160))
-    readonly property real wallpaperContentHeight: Math.max(420, Math.min(580, height - 120))
+    readonly property real wallpaperShellInnerMargin: 14
+    readonly property real wallpaperGalleryMargin: 6
+    readonly property real wallpaperGridSideMargin: 8
+    readonly property real wallpaperGridVerticalMargin: 8
+    readonly property real wallpaperTileSpacing: 10
+    readonly property real wallpaperGridColumns: 3
+    readonly property real wallpaperGridRows: 4
+    readonly property real wallpaperAspectRatio: 21.0 / 9.0
+    readonly property real wallpaperFooterHeight: 42
+    readonly property real wallpaperFooterGap: 10
+    readonly property real wallpaperContentAreaWidth: wallpaperSearchWidth - wallpaperShellInnerMargin * 2
+    readonly property real wallpaperGridWidth: wallpaperContentAreaWidth - wallpaperGalleryMargin * 2
+    readonly property real wallpaperCellStride: Math.max(1, Math.floor((wallpaperGridWidth - wallpaperGridSideMargin * 2) / wallpaperGridColumns))
+    readonly property real wallpaperTileWidth: Math.max(1, wallpaperCellStride - wallpaperTileSpacing)
+    readonly property real wallpaperTileHeight: Math.max(1, Math.floor(wallpaperTileWidth / wallpaperAspectRatio))
+    readonly property real wallpaperGridHeight: wallpaperGridVerticalMargin * 2 + wallpaperGridRows * wallpaperTileHeight + (wallpaperGridRows - 1) * wallpaperTileSpacing
+    readonly property real wallpaperContentHeight: wallpaperShellInnerMargin * 2 + wallpaperFooterHeight + wallpaperFooterGap + wallpaperGalleryMargin * 2 + wallpaperGridHeight
     readonly property real contentHeight: lerp(lerp(normalContentHeight, clipboardContentHeight, clipboardTransitionProgress), wallpaperContentHeight, wallpaperTransitionProgress)
     readonly property real launcherHeight: searchHeight + contentGap + contentHeight
     readonly property real finalSearchX: (width - searchWidth) * 0.5

@@ -47,9 +47,11 @@ Item {
 
             required property int index
             required property string title
+            required property string launchType
             required property string launchValue
             required property string previewPath
             required property bool isVideo
+            readonly property bool randomWallpaperTile: launchType === "wallpaperRandom"
 
             width: root.tileWidth
             height: root.tileHeight
@@ -67,13 +69,58 @@ Item {
                 }
             }
 
+            Rectangle {
+                anchors.fill: parent
+                visible: tile.randomWallpaperTile
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0.0
+                        color: Qt.rgba(0.72, 0.55, 1.0, 0.34)
+                    }
+
+                    GradientStop {
+                        position: 1.0
+                        color: Qt.rgba(0.28, 0.72, 1.0, 0.22)
+                    }
+                }
+            }
+
             Image {
                 anchors.fill: parent
+                visible: !tile.randomWallpaperTile
                 source: tile.previewPath !== "" ? "file://" + tile.previewPath : ""
                 fillMode: Image.PreserveAspectCrop
                 smooth: true
                 asynchronous: true
                 cache: true
+            }
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                visible: tile.randomWallpaperTile
+                spacing: 6
+
+                AppIcon {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "󰒟"
+                    color: Theme.textPrimary
+                    font.pixelSize: 28
+                }
+
+                AppText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: tile.title
+                    color: Theme.textPrimary
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                }
+
+                AppText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "2s shuffle"
+                    color: Theme.textSecondary
+                    font.pixelSize: 10
+                }
             }
 
             Rectangle {
@@ -82,7 +129,7 @@ Item {
             }
 
             Rectangle {
-                visible: tile.isVideo
+                visible: tile.isVideo && !tile.randomWallpaperTile
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.margins: 8

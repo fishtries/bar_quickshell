@@ -23,10 +23,17 @@ PanelWindow {
     property real contentRevealProgress: 0.0
     property bool opened: false
     property bool closing: false
+    property bool closingFromWallpaperRoulette: false
     readonly property bool clipboardMode: searchState ? searchState.clipboardMode : false
     readonly property bool wallpaperMode: searchState ? searchState.wallpaperMode : false
+    readonly property bool wallpaperRandomizing: searchState ? searchState.wallpaperRandomizing : false
+    readonly property bool wallpaperRouletteActive: wallpaperRandomizing && !closing
     property real clipboardTransitionProgress: clipboardMode ? 1.0 : 0.0
     property real wallpaperTransitionProgress: wallpaperMode ? 1.0 : 0.0
+    property real wallpaperRouletteProgress: wallpaperRouletteActive ? 1.0 : 0.0
+    readonly property real rouletteSearchShellHeight: 192
+    readonly property real displayedSearchShellHeight: metrics.searchShellHeight + (rouletteSearchShellHeight - metrics.searchShellHeight) * wallpaperRouletteProgress
+    readonly property real contentRandomHideOffset: Math.min(180, metrics.contentHeight * 0.45)
     readonly property bool keyboardInteractive: visible && !closing && inputMorphProgress >= 0.5
 
     signal closeRequested()
@@ -185,6 +192,7 @@ PanelWindow {
             return
 
         openSequence.stop()
+        closingFromWallpaperRoulette = wallpaperRandomizing || wallpaperRouletteProgress > 0.001
         closing = true
         opened = false
         closeSequence.start()
@@ -210,6 +218,7 @@ PanelWindow {
             resetPhases()
             opened = false
             closing = false
+            closingFromWallpaperRoulette = false
         }
     }
 
@@ -267,6 +276,13 @@ PanelWindow {
     Behavior on wallpaperTransitionProgress {
         NumberAnimation {
             duration: AnimationConfig.durationModerate
+            easing.type: AnimationConfig.easingMovement
+        }
+    }
+
+    Behavior on wallpaperRouletteProgress {
+        NumberAnimation {
+            duration: AnimationConfig.durationExtraSlow
             easing.type: AnimationConfig.easingMovement
         }
     }
@@ -357,10 +373,10 @@ PanelWindow {
             Rectangle {
                 id: searchShell
                 x: metrics.searchShellX
-                y: metrics.searchShellY
+                y: metrics.searchShellY + (root.height * 0.5 - root.displayedSearchShellHeight * 0.5 - metrics.searchShellY) * root.wallpaperRouletteProgress
                 width: metrics.searchShellWidth
-                height: metrics.searchShellHeight
-                radius: metrics.searchShellRadius
+                height: root.displayedSearchShellHeight
+                radius: metrics.searchShellRadius + (26 - metrics.searchShellRadius) * root.wallpaperRouletteProgress
                 opacity: metrics.searchShellOpacity
                 color: Theme.bgElevated
                 border.width: 1
@@ -380,7 +396,7 @@ PanelWindow {
                     textValue: searchState ? searchState.query : ""
                     placeholderText: searchState ? searchState.placeholderText : "Search"
                     busy: searchState ? (searchState.loadingCatalog || searchState.loadingUsage || searchState.loadingFiles || searchState.loadingWallpapers || searchState.loadingClipboard || searchState.loadingClipboardPreview) : false
-                    opacity: metrics.inputOpacity
+                    opacity: metrics.inputOpacity * (1.0 - root.wallpaperRouletteProgress)
                     onTextEdited: function(value) {
                         if (searchState)
                             searchState.setQuery(value)
@@ -390,16 +406,27 @@ PanelWindow {
                             event.accepted = true
                     }
                 }
+
+                Vicinae.VicinaeWallpaperRoulette {
+                    anchors.fill: parent
+                    items: searchState ? searchState.wallpaperRouletteItems : []
+                    winnerIndex: searchState ? searchState.wallpaperRouletteWinnerIndex : -1
+                    revision: searchState ? searchState.wallpaperRouletteRevision : 0
+                    active: root.wallpaperRouletteActive
+                    animationDuration: searchState ? searchState.wallpaperRandomDuration : 2000
+                    opacity: root.wallpaperRouletteProgress
+                    visible: opacity > 0.001
+                }
             }
 
             Rectangle {
                 id: contentShell
                 x: metrics.finalSearchX
-                y: metrics.contentShellY
+                y: metrics.contentShellY + root.contentRandomHideOffset * root.wallpaperRouletteProgress
                 width: metrics.searchWidth
                 height: metrics.contentShellHeight
                 radius: 26
-                opacity: metrics.contentShellOpacity
+                opacity: root.closingFromWallpaperRoulette ? 0.0 : metrics.contentShellOpacity * (1.0 - root.wallpaperRouletteProgress)
                 color: Theme.bgPopout
                 border.width: 1
                 border.color: Theme.borderSubtle
@@ -415,7 +442,7 @@ PanelWindow {
                 Item {
                     anchors.fill: parent
                     anchors.margins: 14
-                    opacity: metrics.contentShellOpacity
+                    opacity: root.closingFromWallpaperRoulette ? 0.0 : metrics.contentShellOpacity * (1.0 - root.wallpaperRouletteProgress)
                     y: metrics.contentInnerY
 
                     Vicinae.VicinaeContentArea {

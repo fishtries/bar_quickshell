@@ -135,7 +135,7 @@ Item {
             Layout.fillHeight: true
             model: root.searchState ? root.searchState.resultsModel : null
             currentIndex: root.searchState ? root.searchState.selectedIndex : -1
-            itemCount: root.searchState ? root.searchState.resultCount : 0
+            itemCount: root.searchState ? root.searchState.resultsModel.count : 0
             onItemPressed: function(index) {
                 root.itemPressed(index)
             }
