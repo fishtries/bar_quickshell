@@ -52,11 +52,11 @@ activate_local() {
     cp "$REPO_DIR/data/aside-overlay.service" "$USER_UNITS/"
 
     systemctl --user daemon-reload
-    systemctl --user restart aside-daemon aside-overlay
+    systemctl --user restart aside-daemon
 
     echo "==> Switched to local build"
     echo "    Code changes are live — just restart services:"
-    echo "    systemctl --user restart aside-daemon aside-overlay"
+    echo "    systemctl --user restart aside-daemon"
 }
 
 activate_system() {
@@ -70,7 +70,7 @@ activate_system() {
     rm -f "$USER_UNITS/aside-overlay.service"
 
     systemctl --user daemon-reload
-    systemctl --user restart aside-daemon aside-overlay
+    systemctl --user restart aside-daemon
 
     echo "==> Switched to AUR build"
 }

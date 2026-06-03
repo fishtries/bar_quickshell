@@ -290,11 +290,11 @@ Item {
                     }
                 }
 
-                Item {
+                ColumnLayout {
+                    id: compactTextCol
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
                     Layout.alignment: Qt.AlignVCenter
-                    implicitHeight: Math.min(compactTextCol.implicitHeight, Math.max(0, compactView.height))
+                    spacing: 1
                     clip: true
                     layer.enabled: root.notifBlur > 0
                     layer.effect: MultiEffect {
@@ -302,31 +302,26 @@ Item {
                         blurMax: AnimationConfig.blurMaxLight
                         blur: root.notifBlur
                     }
-                    ColumnLayout {
-                        id: compactTextCol
-                        anchors.fill: parent
-                        spacing: 1
 
-                        AppText {
-                            text: root.displayedNotification ? (root.displayedNotification.summary || "") : ""
-                            color: "#ffffff"
-                            font { pixelSize: 14; weight: Font.DemiBold }
-                            elide: Text.ElideRight
-                            wrapMode: Text.NoWrap
-                            maximumLineCount: 1
-                            Layout.fillWidth: true
-                        }
+                    AppText {
+                        text: root.displayedNotification ? (root.displayedNotification.summary || "") : ""
+                        color: "#ffffff"
+                        font { pixelSize: 14; weight: Font.DemiBold }
+                        elide: Text.ElideRight
+                        wrapMode: Text.NoWrap
+                        maximumLineCount: 1
+                        Layout.fillWidth: true
+                    }
 
-                        AppText {
-                            text: root.displayedNotification ? (root.displayedNotification.body || "") : ""
-                            color: "#cccccc"
-                            font.pixelSize: 11
-                            elide: Text.ElideRight
-                            wrapMode: Text.NoWrap
-                            maximumLineCount: 1
-                            Layout.fillWidth: true
-                            visible: text !== ""
-                        }
+                    AppText {
+                        text: root.displayedNotification ? (root.displayedNotification.body || "") : ""
+                        color: "#cccccc"
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                        wrapMode: Text.NoWrap
+                        maximumLineCount: 1
+                        Layout.fillWidth: true
+                        visible: text !== ""
                     }
                 }
 
@@ -393,20 +388,17 @@ Item {
                     }
                 }
 
-                Item {
+                ColumnLayout {
+                    id: expandedTextCol
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
-                    implicitHeight: expandedTextCol.implicitHeight
+                    spacing: 2
                     layer.enabled: root.notifBlur > 0
                     layer.effect: MultiEffect {
                         blurEnabled: true
                         blurMax: AnimationConfig.blurMaxLight
                         blur: root.notifBlur
                     }
-                    ColumnLayout {
-                        id: expandedTextCol
-                        anchors.fill: parent
-                        spacing: 2
 
                         AppText {
                             text: root.displayedNotification ? (root.displayedNotification.appName || "System") : ""
@@ -554,7 +546,6 @@ Item {
                             }
                         }
                     }
-                }
             }
 
             MouseArea {

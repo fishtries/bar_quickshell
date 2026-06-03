@@ -144,7 +144,7 @@ PopoutWrapper {
                             label: "Night Light"
                             isActive: root.nightLightActive
                             onClicked: {
-                                Hyprland.dispatch("exec pkill hyprsunset || hyprsunset -t 3500")
+                                Hyprland.dispatch("hl.dsp.exec_cmd(\"pkill hyprsunset || hyprsunset -t 3500\")")
                                 root.nightLightActive = !root.nightLightActive
                             }
                         }
@@ -337,7 +337,7 @@ PopoutWrapper {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 wifiPendingId = root.wifiEssid
-                                Hyprland.dispatch("exec nmcli connection down id \"" + root.wifiEssid + "\"")
+                                Hyprland.dispatch("hl.dsp.exec_cmd(\"nmcli connection down id \\\"" + root.wifiEssid + "\\\"\")")
                             }
                         }
                     }
@@ -437,7 +437,7 @@ PopoutWrapper {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         wifiPendingId = modelData.ssid
-                                        Hyprland.dispatch("exec nmcli device wifi connect \"" + modelData.ssid + "\"")
+                                        Hyprland.dispatch("hl.dsp.exec_cmd(\"nmcli device wifi connect \\\"" + modelData.ssid + "\\\"\")")
                                     }
                                 }
                             }

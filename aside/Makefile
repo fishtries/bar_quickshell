@@ -32,7 +32,7 @@ dev:
 		cp data/aside-overlay.service $(SYSTEMD)/; \
 		systemctl --user daemon-reload; \
 	fi
-	systemctl --user restart aside-daemon aside-overlay
+	systemctl --user restart aside-daemon
 	@echo "==> Dev ready"
 
 # ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ system:
 	rm -f $(BIN)/aside $(BIN)/aside-overlay
 	rm -f $(SYSTEMD)/aside-daemon.service $(SYSTEMD)/aside-overlay.service
 	systemctl --user daemon-reload
-	systemctl --user restart aside-daemon aside-overlay
+	systemctl --user restart aside-daemon
 	@echo "==> Switched to AUR build"
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ install:
 	fi
 	systemctl --user daemon-reload
 	@echo "==> Done. Enable with:"
-	@echo "    systemctl --user enable --now aside-daemon aside-overlay"
+	@echo "    systemctl --user enable --now aside-daemon"
 
 # ---------------------------------------------------------------------------
 # Uninstall (preserves config)

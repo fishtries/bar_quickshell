@@ -72,7 +72,7 @@ do_setup() {
     ssh_run "cd $REMOTE_DIR && make install"
 
     echo "=> [6/6] Enabling and starting services"
-    ssh_run "systemctl --user enable --now aside-daemon aside-overlay" 2>&1 || true
+    ssh_run "systemctl --user enable --now aside-daemon" 2>&1 || true
     sleep 3
 
     echo ""
@@ -125,7 +125,7 @@ do_rebuild() {
 
 do_restart() {
     echo "=> restart services"
-    ssh_run "systemctl --user restart aside-daemon aside-overlay && sleep 3" 2>&1
+    ssh_run "systemctl --user restart aside-daemon && sleep 3" 2>&1
     echo "=> services restarted"
 }
 

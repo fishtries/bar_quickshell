@@ -198,6 +198,23 @@ PanelWindow {
         closeSequence.start()
     }
 
+    function closeImmediately() {
+        if (!visible)
+            return
+
+        openSequence.stop()
+        closeSequence.stop()
+        closing = false
+        opened = false
+        closingFromWallpaperRoulette = false
+
+        if (root.searchState)
+            root.searchState.resetForClose()
+
+        root.visible = false
+        root.closeRequested()
+    }
+
     onVisibleChanged: {
         openSequence.stop()
         closeSequence.stop()
@@ -332,6 +349,11 @@ PanelWindow {
             id: popupShell
             anchors.fill: parent
             focus: root.visible
+
+            Keys.onPressed: event => {
+                if (searchState && searchState.handleKeyPress(event.key, event.modifiers))
+                    event.accepted = true
+            }
 
             Item {
                 id: orbMaskItem
@@ -508,8 +530,11 @@ PanelWindow {
             root.resultActivated(item)
         }
 
-        function onCloseRequested() {
-            root.beginClose()
+        function onCloseRequested(immediate) {
+            if (immediate)
+                root.closeImmediately()
+            else
+                root.beginClose()
         }
     }
 }

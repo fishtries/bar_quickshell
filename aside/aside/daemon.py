@@ -13,6 +13,7 @@ import os
 import re
 import threading
 import time
+import urllib.request
 from pathlib import Path
 
 from aside.config import (
@@ -255,6 +256,9 @@ class Daemon:
         self._cancel_lock = threading.Lock()
         # Mic capture cancel state (separate from query cancel)
         self._mic_cancel: threading.Event | None = None
+        self._confirmation_lock = threading.Lock()
+        self._confirmation_event: threading.Event | None = None
+        self._confirmation_decision: bool | None = None
         self._voice_lock = threading.Lock()
         self._wake_cancel = threading.Event()
         self._wake_thread: threading.Thread | None = None
@@ -381,8 +385,122 @@ class Daemon:
                 log.info("No query to cancel")
             if self._mic_cancel is not None:
                 self._mic_cancel.set()
+        with self._confirmation_lock:
+            self._confirmation_decision = False
+            if self._confirmation_event is not None:
+                self._confirmation_event.set()
         if self.tts is not None:
             self.tts.stop()
+
+    def confirm_tool_decision(self, decision: bool) -> bool:
+        with self._confirmation_lock:
+            event = self._confirmation_event
+            if event is None:
+                return False
+            self._confirmation_decision = decision
+            event.set()
+        with self._cancel_lock:
+            if self._mic_cancel is not None:
+                self._mic_cancel.set()
+        if self.tts is not None:
+            self.tts.stop()
+        return True
+
+    def _confirmation_tts_text(self, tool_name: str, arguments: dict, prompt: str) -> str:
+        if tool_name != "reminders":
+            return prompt
+        if self.config.get("tools", {}).get("confirm_ai_comment", True) is False:
+            return ""
+        try:
+            return self._generate_reminder_confirmation_comment(arguments)
+        except Exception:
+            log.exception("Failed to generate reminder confirmation comment")
+            return ""
+
+    def _generate_reminder_confirmation_comment(self, arguments: dict) -> str:
+        model_cfg = self.config.get("model", {})
+        model = model_cfg.get("name", "ollama/qwen-local")
+        timeout = float(self.config.get("tools", {}).get("confirm_comment_timeout", 6))
+        title = str(
+            arguments.get("new_title")
+            or arguments.get("title")
+            or arguments.get("old_title")
+            or arguments.get("query")
+            or "напоминание"
+        ).strip()
+        action = str(arguments.get("action") or "create").strip()
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Ты Aside. Сгенерируй одну короткую живую фразу на русском в своём стиле "
+                    "для момента перед подтверждением напоминания. Не перечисляй дату, время, список. "
+                    "Не проси сказать да или нет. Не используй кавычки. Максимум 18 слов."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Действие: {action}. Напоминание: {title}.",
+            },
+        ]
+        if model.startswith("ollama/"):
+            text = self._ollama_comment(model, messages, model_cfg, timeout)
+        else:
+            text = self._litellm_comment(model, messages, model_cfg, timeout)
+        return self._clean_confirmation_comment(text)
+
+    def _ollama_comment(self, model: str, messages: list[dict], model_cfg: dict, timeout: float) -> str:
+        endpoint = str(model_cfg.get("api_base") or "http://localhost:11434").rstrip("/")
+        url = endpoint if endpoint.endswith("/api/generate") else endpoint + "/api/generate"
+        model_name = model.split("/", 1)[1] if model.startswith("ollama/") else model
+        prompt = "\n\n".join(f"{m['role']}: {m['content']}" for m in messages)
+        payload = {
+            "model": model_name,
+            "prompt": prompt,
+            "stream": False,
+            "keep_alive": str(model_cfg.get("ollama_keep_alive", "30m")),
+            "options": {
+                "num_predict": 48,
+                "temperature": 0.85,
+            },
+        }
+        if bool(model_cfg.get("disable_thinking", True)):
+            payload["think"] = False
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return str(data.get("response") or "")
+
+    def _litellm_comment(self, model: str, messages: list[dict], model_cfg: dict, timeout: float) -> str:
+        import litellm
+        kwargs = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": 48,
+            "temperature": 0.85,
+            "timeout": timeout,
+        }
+        if model_cfg.get("api_base"):
+            kwargs["api_base"] = model_cfg.get("api_base")
+        resp = litellm.completion(**kwargs)
+        choice = resp.choices[0]
+        return str(choice.message.content or "")
+
+    def _clean_confirmation_comment(self, text: str) -> str:
+        cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
+        cleaned = cleaned.replace("/no_think", "").strip()
+        cleaned = cleaned.strip("\"'“”«» \n\t")
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        if not cleaned:
+            return ""
+        sentences = re.split(r"(?<=[.!?…])\s+", cleaned)
+        cleaned = sentences[0].strip() if sentences else cleaned
+        return cleaned[:220].strip()
 
     def _confirmation_capture_config(self) -> dict:
         cfg = dict(self.config.get("voice", {}))
@@ -394,39 +512,63 @@ class Daemon:
         return cfg
 
     def _confirm_tool_action(self, tool_name: str, arguments: dict, prompt: str) -> bool:
-        if capture_one_shot is None:
-            log.warning("Tool confirmation rejected: STT not installed")
-            return False
-
         tools_cfg = self.config.get("tools", {})
         yes_phrases = [str(p) for p in tools_cfg.get("confirm_yes_phrases", _CONFIRM_YES_PHRASES)]
         no_phrases = [str(p) for p in tools_cfg.get("confirm_no_phrases", _CONFIRM_NO_PHRASES)]
         cancel = threading.Event()
+        decision_event = threading.Event()
+        button_decision: bool | None = None
+        with self._confirmation_lock:
+            self._confirmation_event = decision_event
+            self._confirmation_decision = None
 
-        if self.tts is not None:
-            try:
-                self.tts.stop()
-                if tools_cfg.get("confirm_tts", True):
-                    self.tts.start()
-                    self.tts.speak(prompt + " Скажи да или нет.")
-                    self.tts.finish()
-                    self.tts.wait_done(timeout=20)
-                    self.tts.stop()
-            except Exception:
-                log.exception("Tool confirmation TTS failed")
-
-        from aside.query import _connect_overlay, _overlay_send, _overlay_close
+        from aside.query import _connect_overlay, _overlay_send, _overlay_close, _reminder_preview_payload
 
         overlay_sock = _connect_overlay()
         try:
-            _overlay_send(overlay_sock, {"cmd": "replace", "data": prompt + "\n\nСкажи «да» или «нет»."})
+            if tool_name == "reminders":
+                _overlay_send(overlay_sock, _reminder_preview_payload(arguments))
+            else:
+                _overlay_send(overlay_sock, {"cmd": "replace", "data": prompt + "\n\nСкажи «да» или «нет»."})
             _overlay_send(overlay_sock, {"cmd": "listening"})
 
+            if self.tts is not None:
+                try:
+                    self.tts.stop()
+                    if tools_cfg.get("confirm_tts", True):
+                        comment = self._confirmation_tts_text(tool_name, arguments, prompt)
+                        with self._confirmation_lock:
+                            already_decided = (
+                                self._confirmation_event is decision_event
+                                and self._confirmation_decision is not None
+                            )
+                        if comment and not already_decided:
+                            self.tts.start()
+                            self.tts.speak(comment)
+                            self.tts.finish()
+                            self.tts.wait_done(timeout=12)
+                            self.tts.stop()
+                except Exception:
+                    log.exception("Tool confirmation TTS failed")
+
+            with self._confirmation_lock:
+                if self._confirmation_event is decision_event and self._confirmation_decision is not None:
+                    return self._confirmation_decision is True
+
+            if capture_one_shot is None:
+                log.warning("Tool confirmation waiting for buttons: STT not installed")
+                decision_event.wait(timeout=float(tools_cfg.get("confirm_button_timeout", 60)))
+                with self._confirmation_lock:
+                    return self._confirmation_decision is True
+
             def on_interim(text):
-                _overlay_send(overlay_sock, {
-                    "cmd": "replace",
-                    "data": prompt + "\n\nСлушаю: " + text,
-                })
+                if tool_name == "reminders":
+                    _overlay_send(overlay_sock, _reminder_preview_payload(arguments, transcript=text))
+                else:
+                    _overlay_send(overlay_sock, {
+                        "cmd": "replace",
+                        "data": prompt + "\n\nСлушаю: " + text,
+                    })
 
             def on_audio_level(level):
                 _overlay_send(overlay_sock, {
@@ -450,8 +592,16 @@ class Daemon:
             with self._cancel_lock:
                 if self._mic_cancel is cancel:
                     self._mic_cancel = None
+            with self._confirmation_lock:
+                if self._confirmation_event is decision_event:
+                    button_decision = self._confirmation_decision
+                    self._confirmation_event = None
+                    self._confirmation_decision = None
             _overlay_close(overlay_sock)
 
+        if button_decision is not None:
+            log.info("Tool confirmation for %s: button -> %s", tool_name, button_decision)
+            return button_decision is True
         decision = _parse_confirmation_response(text or "", yes_phrases, no_phrases)
         log.info("Tool confirmation for %s: %r -> %s", tool_name, text, decision)
         return decision is True
@@ -710,6 +860,11 @@ class Daemon:
                 except Exception:
                     pass
                 log.info("Socket: cancel")
+
+            elif action == "confirm_tool":
+                decision = bool(msg.get("decision"))
+                accepted = self.confirm_tool_decision(decision)
+                log.info("Socket: confirm_tool -> %s (accepted=%s)", decision, accepted)
 
             elif action == "stop_tts":
                 if self.tts is not None:

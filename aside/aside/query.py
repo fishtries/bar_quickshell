@@ -380,6 +380,14 @@ def _should_force_reminder_create(text: str, tools: list[dict] | None, config: d
     return _parse_forced_reminder_create(text, config) is not None
 
 
+def _use_model_tools(model: str, tools: list[dict] | None, config: dict, ollama_fast_path: bool) -> bool:
+    if not tools:
+        return False
+    if model.startswith("ollama/") and ollama_fast_path:
+        return bool(config.get("tools", {}).get("ollama_model_tools", False))
+    return True
+
+
 def _tool_action(arguments: dict) -> str:
     return str(arguments.get("action") or "").strip().lower()
 
@@ -426,6 +434,30 @@ def _tool_confirmation_prompt(name: str, arguments: dict) -> str:
         return f"Подтвердить изменение напоминания: {target}; {change_text}?"
     rendered = json.dumps(arguments, ensure_ascii=False, default=str)
     return f"Подтвердить действие {name}: {rendered}?"
+
+
+def _reminder_preview_payload(arguments: dict, status: str = "pending", transcript: str = "") -> dict:
+    action = _tool_action(arguments)
+    title = str(
+        arguments.get("new_title")
+        or arguments.get("title")
+        or arguments.get("old_title")
+        or arguments.get("query")
+        or "напоминание"
+    ).strip()
+    date = str(arguments.get("new_date") or arguments.get("date") or "").strip()
+    time_value = str(arguments.get("new_time") or arguments.get("time") or "").strip()
+    list_name = str(arguments.get("new_list_name") or arguments.get("list_name") or "").strip()
+    return {
+        "cmd": "reminder_preview",
+        "action": action or "create",
+        "title": title,
+        "date": date,
+        "time": time_value,
+        "list_name": list_name,
+        "status": status,
+        "transcript": transcript,
+    }
 
 
 def _with_no_think(messages: list[dict], model: str, disable: bool) -> list[dict]:
@@ -979,6 +1011,7 @@ def send_query(
     ollama_fast_path = bool(model_config.get("ollama_fast_path", True))
     ollama_keep_alive = str(model_config.get("ollama_keep_alive", "30m"))
     ollama_think = False if disable_thinking else model_config.get("ollama_think")
+    model_tools = tools if _use_model_tools(model, tools, config, ollama_fast_path) else []
 
     try:
         forced_reminder_args = (
@@ -1008,10 +1041,7 @@ def send_query(
             confirmed = True
             if _requires_tool_confirmation("reminders", forced_reminder_args, config):
                 prompt = _tool_confirmation_prompt("reminders", forced_reminder_args)
-                if full_text:
-                    full_text += "\n\n"
-                full_text += prompt + "\n\n"
-                _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
+                _overlay_send(overlay_sock, _reminder_preview_payload(forced_reminder_args))
                 status.set_status("tool_use", tool_name="confirm")
                 confirmed = bool(confirm_tool and confirm_tool("reminders", forced_reminder_args, prompt))
                 if speak_on and tts is not None and not getattr(tts, "_running", False):
@@ -1026,18 +1056,16 @@ def send_query(
                     "tool_call_id": FORCED_REMINDER_TOOL_ID,
                     "content": _format_tool_result(result),
                 })
-                if full_text:
-                    full_text += "\n\n"
-                full_text += "reminders\n\n"
+                _overlay_send(overlay_sock, _reminder_preview_payload(forced_reminder_args, status="confirmed"))
             else:
                 conv["messages"].append({
                     "role": "tool",
                     "tool_call_id": FORCED_REMINDER_TOOL_ID,
                     "content": "Action cancelled by user.",
                 })
+                _overlay_send(overlay_sock, _reminder_preview_payload(forced_reminder_args, status="cancelled"))
 
             store.write_transcript(conv)
-            _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
             _overlay_send(overlay_sock, {"cmd": "thinking"})
             if speak_on and tts is not None and tts._running:
                 status.set_status("speaking")
@@ -1102,13 +1130,13 @@ def send_query(
                 messages,
                 model,
                 disable_thinking,
-                tools_enabled=bool(tools),
+                tools_enabled=bool(model_tools),
             )
 
             resp_text, tool_calls, usage = stream_response(
                 model=model,
                 messages=messages,
-                tools=tools or [],
+                tools=model_tools or [],
                 cancel_event=cancel_event,
                 overlay_sock=overlay_sock,
                 tts=tts,
@@ -1175,15 +1203,20 @@ def send_query(
                     break
                 if _requires_tool_confirmation(tc["name"], tc["arguments"], config):
                     prompt = _tool_confirmation_prompt(tc["name"], tc["arguments"])
-                    if full_text:
-                        full_text += "\n\n"
-                    full_text += prompt + "\n\n"
-                    _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
+                    if tc["name"] == "reminders":
+                        _overlay_send(overlay_sock, _reminder_preview_payload(tc["arguments"]))
+                    else:
+                        if full_text:
+                            full_text += "\n\n"
+                        full_text += prompt + "\n\n"
+                        _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
                     status.set_status("tool_use", tool_name="confirm")
                     confirmed = bool(confirm_tool and confirm_tool(tc["name"], tc["arguments"], prompt))
                     if speak_on and tts is not None and not getattr(tts, "_running", False):
                         tts.start()
                     if not confirmed:
+                        if tc["name"] == "reminders":
+                            _overlay_send(overlay_sock, _reminder_preview_payload(tc["arguments"], status="cancelled"))
                         result = "Action cancelled by user."
                         conv["messages"].append({
                             "role": "tool",
@@ -1195,6 +1228,8 @@ def send_query(
                 log.info("Executing tool: %s", tc["name"])
                 status.set_status("tool_use", tool_name=tc["name"])
                 result = run_tool(tc["name"], tc["arguments"], dirs)
+                if tc["name"] == "reminders":
+                    _overlay_send(overlay_sock, _reminder_preview_payload(tc["arguments"], status="confirmed"))
 
                 conv["messages"].append({
                     "role": "tool",
@@ -1205,11 +1240,12 @@ def send_query(
             store.write_transcript(conv)
 
             # Update overlay with tool execution info.
-            tool_names = " \u2192 ".join(tc["name"] for tc in tool_calls)
-            if full_text:
-                full_text += "\n\n"
-            full_text += f"{tool_names}\n\n"
-            _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
+            visible_tool_names = " \u2192 ".join(tc["name"] for tc in tool_calls if tc["name"] != "reminders")
+            if visible_tool_names:
+                if full_text:
+                    full_text += "\n\n"
+                full_text += f"{visible_tool_names}\n\n"
+                _overlay_send(overlay_sock, {"cmd": "replace", "data": full_text})
             # Show accent sweep while waiting for the next LLM response.
             # CMD_TEXT in the overlay will clear thinking_active automatically.
             _overlay_send(overlay_sock, {"cmd": "thinking"})

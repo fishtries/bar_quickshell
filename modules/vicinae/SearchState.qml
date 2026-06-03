@@ -196,7 +196,7 @@ Item {
     readonly property string footerStatus: clipboardMode ? (loadingClipboard ? "Loading clipboard history..." : loadingClipboardPreview ? "Loading preview..." : clipboardStatusMessage !== "" ? clipboardStatusMessage : clipboardSummary) : wallpaperMode ? (loadingWallpapers ? "Loading wallpapers..." : wallpaperStatusMessage !== "" ? wallpaperStatusMessage : wallpaperSummary) : loadingCatalog ? "Loading applications..." : loadingUsage ? "Loading usage history..." : loadingFavorites ? "Loading favorites..." : loadingFiles ? "Searching files..." : statusMessage !== "" ? statusMessage : resultSummary
 
     signal resultActivated(var item)
-    signal closeRequested()
+    signal closeRequested(bool immediate)
 
     function normalizeText(value) {
         return (value || "").toString().toLowerCase().trim()
@@ -949,7 +949,7 @@ Item {
         registerItemUsage(item)
 
         if (closeAfter)
-            closeRequested()
+            closeRequested(false)
 
         return true
     }
@@ -1179,7 +1179,7 @@ Item {
         clipboardActionProcess.command = ["python3", clipboardScriptPath, "paste", item.rawToken]
         clipboardActionProcess.running = true
         resultActivated(item)
-        closeRequested()
+        closeRequested(true)
         return true
     }
 
@@ -1409,7 +1409,7 @@ Item {
             clipboardCopyProcess.running = true
             resultActivated(launchItem)
             registerItemUsage(launchItem)
-            closeRequested()
+            closeRequested(false)
             return true
         }
 
@@ -1417,7 +1417,7 @@ Item {
             launchDetached(detachedProgramCommand("gtk-launch", [launchValue]))
             resultActivated(launchItem)
             registerItemUsage(launchItem)
-            closeRequested()
+            closeRequested(false)
             return true
         }
 
@@ -1425,7 +1425,7 @@ Item {
             launchDetached(detachedProgramCommand("xdg-open", [launchValue]))
             resultActivated(launchItem)
             registerItemUsage(launchItem)
-            closeRequested()
+            closeRequested(false)
             return true
         }
 
@@ -1433,7 +1433,7 @@ Item {
             launchDetached(detachedShellCommand(launchValue))
             resultActivated(launchItem)
             registerItemUsage(launchItem)
-            closeRequested()
+            closeRequested(false)
             return true
         }
 
@@ -1689,7 +1689,7 @@ Item {
             if (modifiers !== Qt.NoModifier)
                 return false
 
-            closeRequested()
+            closeRequested(false)
             return true
         default:
             return false

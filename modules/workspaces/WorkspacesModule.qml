@@ -237,7 +237,7 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent
                         enabled: root.interactionEnabled && !root.isIsland
-                        onClicked: Hyprland.dispatch("workspace " + wId)
+                        onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = \"" + wId + "\" })")
                     }
                 }
             }

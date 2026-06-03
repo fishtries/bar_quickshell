@@ -17,7 +17,14 @@ QtObject {
         interval: 60000
         running: true
         repeat: true
-        triggeredOnStart: true
+        triggeredOnStart: false
+        onTriggered: root.reloadTodos()
+    }
+
+    readonly property Timer _startupDelay: Timer {
+        interval: 2000
+        running: true
+        repeat: false
         onTriggered: root.reloadTodos()
     }
 

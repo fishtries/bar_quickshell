@@ -225,12 +225,152 @@ PopoutWrapper {
                 }
             }
 
+            Rectangle {
+                visible: Aside.AsideState.reminderPreviewVisible
+                Layout.fillWidth: true
+                implicitHeight: Aside.AsideState.reminderPreviewVisible ? reminderPreviewColumn.implicitHeight + 22 : 0
+                radius: 16
+                color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.12)
+                border.color: Aside.AsideState.reminderPreviewStatus === "cancelled" ? Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.42) : Aside.AsideState.reminderPreviewStatus === "confirmed" ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.42) : Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.36)
+                border.width: 1
+
+                ColumnLayout {
+                    id: reminderPreviewColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 11
+                    spacing: 7
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Text {
+                            text: "󰔛"
+                            color: Theme.info
+                            font.family: Theme.fontIcon
+                            font.pixelSize: 15
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: Aside.AsideState.reminderPreviewStatus === "confirmed" ? "Напоминание подтверждено" : Aside.AsideState.reminderPreviewStatus === "cancelled" ? "Напоминание отменено" : "Подтверди напоминание"
+                            color: Theme.textPrimary
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 13
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            visible: Aside.AsideState.reminderPreviewStatus !== "pending"
+                            text: Aside.AsideState.reminderPreviewStatus === "confirmed" ? "готово" : "отмена"
+                            color: Aside.AsideState.reminderPreviewStatus === "cancelled" ? Theme.error : Theme.success
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: Aside.AsideState.reminderPreviewTitle
+                        color: Theme.textPrimary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 15
+                        font.bold: true
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: Aside.AsideState.reminderPreviewMeta
+                        color: Theme.textSecondary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                    }
+
+                    Text {
+                        visible: Aside.AsideState.reminderPreviewTranscript !== ""
+                        Layout.fillWidth: true
+                        text: "Слушаю: " + Aside.AsideState.reminderPreviewTranscript
+                        color: Theme.textSecondary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RowLayout {
+                        visible: Aside.AsideState.reminderPreviewStatus === "pending"
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 34
+                            radius: 12
+                            color: yesPreviewMouse.containsMouse ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.26) : Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.16)
+                            border.color: Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.42)
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Да"
+                                color: Theme.success
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
+
+                            MouseArea {
+                                id: yesPreviewMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Aside.AsideState.confirmReminder(true)
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 34
+                            radius: 12
+                            color: noPreviewMouse.containsMouse ? Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.24) : Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.13)
+                            border.color: Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.38)
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Нет"
+                                color: Theme.error
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
+
+                            MouseArea {
+                                id: noPreviewMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Aside.AsideState.confirmReminder(false)
+                            }
+                        }
+                    }
+                }
+            }
+
             Repeater {
                 model: Aside.AsideState.messagesModel
 
                 delegate: Rectangle {
+                    readonly property bool hiddenForReminderPreview: Aside.AsideState.reminderPreviewVisible && model.role === "assistant" && model.text === ""
+                    readonly property bool shouldShow: !hiddenForReminderPreview
                     Layout.fillWidth: true
-                    implicitHeight: messageColumn.implicitHeight + 18
+                    visible: shouldShow
+                    implicitHeight: shouldShow ? messageColumn.implicitHeight + 18 : 0
                     radius: 14
                     color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.12) : Theme.bgSubtle
                     border.color: model.role === "user" ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.25) : Theme.borderSubtle

@@ -57,6 +57,7 @@ Rectangle {
             selectByMouse: true
 
             Keys.onPressed: event => {
+                event.accepted = false
                 root.keyPressed(event.key, event.modifiers, event)
             }
 

@@ -76,7 +76,7 @@ def transcribe(audio: np.ndarray, whisper_config: dict) -> str:
         audio_float,
         beam_size=5,
         language=language,
-        vad_filter=True,
+        vad_filter=False,
     )
 
     text = " ".join(seg.text for seg in segments).strip()

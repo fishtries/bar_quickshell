@@ -59,6 +59,8 @@ def main() -> int:
     mic.add_argument("--new", action="store_true")
 
     sub.add_parser("cancel")
+    confirm = sub.add_parser("confirm")
+    confirm.add_argument("decision", choices=["yes", "no"])
     sub.add_parser("stop-tts")
     sub.add_parser("toggle-tts")
     sub.add_parser("status")
@@ -74,6 +76,8 @@ def main() -> int:
             send_daemon({"action": "query", "mic": True, "conversation_id": conversation_id})
         elif args.command == "cancel":
             send_daemon({"action": "cancel"})
+        elif args.command == "confirm":
+            send_daemon({"action": "confirm_tool", "decision": args.decision == "yes"})
         elif args.command == "stop-tts":
             send_daemon({"action": "stop_tts"})
         elif args.command == "toggle-tts":

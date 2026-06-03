@@ -25,12 +25,20 @@ Item {
     property string errorMessage: ""
     property string conversationId: ""
     property real audioLevel: 0.0
+    property bool reminderPreviewVisible: false
+    property string reminderPreviewTitle: ""
+    property string reminderPreviewDate: ""
+    property string reminderPreviewTime: ""
+    property string reminderPreviewList: ""
+    property string reminderPreviewStatus: ""
+    property string reminderPreviewTranscript: ""
     property alias messagesModel: messagesModel
 
-    readonly property bool isBusy: phase === "thinking" || phase === "streaming" || phase === "listening"
+    readonly property bool isBusy: phase === "thinking" || phase === "streaming" || phase === "listening" || phase === "confirming"
     readonly property bool hasConversation: messagesModel.count > 0
     readonly property string shortModelName: shortModel(modelName)
     readonly property string statusText: errorMessage !== "" ? errorMessage : phaseLabel()
+    readonly property string reminderPreviewMeta: reminderMeta()
 
     function showIsland(requestKeyboard) {
         islandAutoHideTimer.stop()
@@ -84,6 +92,8 @@ Item {
             return "bridge starting"
         if (phase === "listening")
             return "listening"
+        if (phase === "confirming")
+            return "confirm reminder"
         if (phase === "thinking")
             return "thinking"
         if (phase === "streaming")
@@ -93,6 +103,17 @@ Item {
         if (statusName === "speaking")
             return "speaking"
         return "ready"
+    }
+
+    function reminderMeta() {
+        let parts = []
+        if (reminderPreviewDate !== "")
+            parts.push(reminderPreviewDate)
+        if (reminderPreviewTime !== "")
+            parts.push(reminderPreviewTime)
+        if (reminderPreviewList !== "")
+            parts.push(reminderPreviewList)
+        return parts.join(" · ")
     }
 
     function startBridge() {
@@ -179,6 +200,8 @@ Item {
             handleThinking()
         else if (name === "listening")
             handleListening()
+        else if (name === "reminder_preview")
+            handleReminderPreview(command)
         else if (name === "audio_level")
             audioLevel = Number(command.data || 0)
         else if (name === "input")
@@ -194,6 +217,7 @@ Item {
         voiceSession = mode === "user"
         phase = mode === "user" ? "listening" : "streaming"
         errorMessage = ""
+        clearReminderPreview()
         if (awaitingAssistant) {
             ensureAssistantMessage()
             return
@@ -223,6 +247,7 @@ Item {
         phase = "idle"
         audioLevel = 0
         voiceSession = false
+        clearReminderPreview()
         refreshStatus()
         scheduleIslandHide()
     }
@@ -232,6 +257,7 @@ Item {
         phase = "idle"
         audioLevel = 0
         voiceSession = false
+        clearReminderPreview()
         messagesModel.clear()
         inputRequested = false
         popoutOpen = false
@@ -249,7 +275,7 @@ Item {
         showIsland(false)
         voiceSession = true
         inputRequested = false
-        phase = "listening"
+        phase = reminderPreviewVisible ? "confirming" : "listening"
     }
 
     function handleStreamStart(convId) {
@@ -259,6 +285,30 @@ Item {
         voiceSession = true
         phase = "streaming"
         ensureAssistantMessage()
+    }
+
+    function handleReminderPreview(command) {
+        reminderPreviewVisible = true
+        reminderPreviewTitle = command.title || ""
+        reminderPreviewDate = command.date || ""
+        reminderPreviewTime = command.time || ""
+        reminderPreviewList = command.list_name || command.list || ""
+        reminderPreviewStatus = command.status || "pending"
+        reminderPreviewTranscript = command.transcript || ""
+        voiceSession = true
+        inputRequested = false
+        phase = reminderPreviewStatus === "confirmed" || reminderPreviewStatus === "cancelled" ? "thinking" : "confirming"
+        showIsland(false)
+    }
+
+    function clearReminderPreview() {
+        reminderPreviewVisible = false
+        reminderPreviewTitle = ""
+        reminderPreviewDate = ""
+        reminderPreviewTime = ""
+        reminderPreviewList = ""
+        reminderPreviewStatus = ""
+        reminderPreviewTranscript = ""
     }
 
     function appendMessage(role, text) {
@@ -277,6 +327,7 @@ Item {
         awaitingAssistant = false
         voiceSession = false
         phase = "idle"
+        clearReminderPreview()
         popoutOpen = true
         showIsland(true)
     }
@@ -294,6 +345,7 @@ Item {
         if (startNew) {
             conversationId = ""
             messagesModel.clear()
+            clearReminderPreview()
         }
         appendMessage("user", trimmed)
         appendMessage("assistant", "")
@@ -315,6 +367,7 @@ Item {
         phase = "listening"
         inputRequested = false
         conversationId = ""
+        clearReminderPreview()
         let command = ["python3", clientScriptPath, "mic", "--new"]
         forceNewConversation = false
         commandProcess.command = command
@@ -325,7 +378,18 @@ Item {
         awaitingAssistant = false
         phase = "idle"
         inputRequested = false
+        clearReminderPreview()
         commandProcess.command = ["python3", clientScriptPath, "cancel"]
+        commandProcess.running = true
+    }
+
+    function confirmReminder(decision) {
+        if (!reminderPreviewVisible || reminderPreviewStatus !== "pending")
+            return
+        reminderPreviewStatus = decision ? "confirmed" : "cancelled"
+        phase = "thinking"
+        inputRequested = false
+        commandProcess.command = ["python3", clientScriptPath, "confirm", decision ? "yes" : "no"]
         commandProcess.running = true
     }
 

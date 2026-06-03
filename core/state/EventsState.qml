@@ -29,13 +29,23 @@ Item {
 
     // --- Logic ---
 
+    FileView {
+        id: eventsFileView
+        path: root.filePath
+        watchChanges: true
+        preload: true
+
+        onFileChanged: root.parseEventsText()
+        onLoaded: root.parseEventsText()
+    }
+
     Timer {
         id: syncTimer
-        interval: 60000 // 1 minute
+        interval: 300000 // 5 minutes — fallback, primary updates via FileView
         running: true
         repeat: true
-        triggeredOnStart: true
-        onTriggered: loadEvents()
+        triggeredOnStart: false
+        onTriggered: eventsFileView.reload()
     }
 
     Timer {
@@ -55,24 +65,20 @@ Item {
         }
     }
 
+    function parseEventsText() {
+        try {
+            let responseText = eventsFileView.text();
+            let trimmed = responseText ? responseText.trim() : "";
+            root.eventMap = trimmed.length > 0 ? JSON.parse(trimmed) : ({});
+            updateSortedList();
+            checkUpcoming();
+        } catch(e) {
+            console.error("[EventsState] Error parsing JSON:", e);
+        }
+    }
+
     function loadEvents() {
-        let xhr = new XMLHttpRequest();
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                if (xhr.status === 200 || xhr.status === 0) {
-                    try {
-                        let responseText = xhr.responseText ? xhr.responseText.trim() : "";
-                        root.eventMap = responseText.length > 0 ? JSON.parse(responseText) : ({});
-                        updateSortedList();
-                        checkUpcoming();
-                    } catch(e) {
-                        console.error("[EventsState] Error parsing JSON:", e);
-                    }
-                }
-            }
-        };
-        xhr.open("GET", root.fileUri, true);
-        xhr.send();
+        eventsFileView.reload();
     }
 
     function clearExpiredSuppressions() {
@@ -379,5 +385,5 @@ Item {
         return -1;
     }
 
-    Component.onCompleted: loadEvents()
+    Component.onCompleted: eventsFileView.reload()
 }

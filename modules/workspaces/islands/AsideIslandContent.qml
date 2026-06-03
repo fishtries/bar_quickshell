@@ -384,6 +384,131 @@ Item {
                 }
             }
 
+            Rectangle {
+                visible: Aside.AsideState.reminderPreviewVisible
+                Layout.fillWidth: true
+                Layout.preferredHeight: Aside.AsideState.reminderPreviewVisible ? Math.max(96, reminderPreviewIslandColumn.implicitHeight + 24) : 0
+                radius: root.asideVoiceIsland ? 24 : 20
+                color: Qt.rgba(1, 1, 1, root.asideVoiceIsland ? 0.115 : 0.085)
+                border.width: 1
+                border.color: Aside.AsideState.reminderPreviewStatus === "cancelled" ? Qt.rgba(1, 0.3, 0.3, 0.42) : Aside.AsideState.reminderPreviewStatus === "confirmed" ? Qt.rgba(0.3, 1, 0.55, 0.34) : Qt.rgba(1, 1, 1, 0.22)
+
+                ColumnLayout {
+                    id: reminderPreviewIslandColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: root.asideVoiceIsland ? 16 : 13
+                    spacing: root.asideVoiceIsland ? 8 : 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 9
+
+                        AppIcon {
+                            text: "󰔛"
+                            font.pixelSize: root.asideVoiceIsland ? 18 : 15
+                            color: "#ffffff"
+                        }
+
+                        AppText {
+                            Layout.fillWidth: true
+                            text: Aside.AsideState.reminderPreviewStatus === "confirmed" ? "Напоминание подтверждено" : Aside.AsideState.reminderPreviewStatus === "cancelled" ? "Напоминание отменено" : "Подтверди напоминание"
+                            color: "#ffffff"
+                            font { pixelSize: root.asideVoiceIsland ? 16 : 13; weight: Font.Bold }
+                            elide: Text.ElideRight
+                        }
+
+                        AppText {
+                            visible: Aside.AsideState.reminderPreviewStatus !== "pending"
+                            text: Aside.AsideState.reminderPreviewStatus === "confirmed" ? "готово" : "отмена"
+                            color: Aside.AsideState.reminderPreviewStatus === "cancelled" ? Theme.error : Theme.success
+                            font { pixelSize: root.asideVoiceIsland ? 12 : 11; weight: Font.Bold }
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    AppText {
+                        Layout.fillWidth: true
+                        text: Aside.AsideState.reminderPreviewTitle
+                        color: "#ffffff"
+                        font { pixelSize: root.asideVoiceIsland ? 18 : 15; weight: Font.Bold }
+                        wrapMode: Text.WordWrap
+                    }
+
+                    AppText {
+                        Layout.fillWidth: true
+                        text: Aside.AsideState.reminderPreviewMeta
+                        color: "#bbbbbb"
+                        font.pixelSize: root.asideVoiceIsland ? 13 : 12
+                        elide: Text.ElideRight
+                    }
+
+                    AppText {
+                        visible: Aside.AsideState.reminderPreviewTranscript !== ""
+                        Layout.fillWidth: true
+                        text: "Слушаю: " + Aside.AsideState.reminderPreviewTranscript
+                        color: "#bbbbbb"
+                        font.pixelSize: root.asideVoiceIsland ? 13 : 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RowLayout {
+                        visible: Aside.AsideState.reminderPreviewStatus === "pending"
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: root.asideVoiceIsland ? 38 : 34
+                            radius: root.asideVoiceIsland ? 18 : 15
+                            color: yesReminderMouse.containsMouse ? Qt.rgba(0.3, 1, 0.55, 0.24) : Qt.rgba(0.3, 1, 0.55, 0.14)
+                            border.width: 1
+                            border.color: Qt.rgba(0.3, 1, 0.55, 0.36)
+
+                            AppText {
+                                anchors.centerIn: parent
+                                text: "Да"
+                                color: Theme.success
+                                font { pixelSize: root.asideVoiceIsland ? 15 : 13; weight: Font.Bold }
+                            }
+
+                            MouseArea {
+                                id: yesReminderMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Aside.AsideState.confirmReminder(true)
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: root.asideVoiceIsland ? 38 : 34
+                            radius: root.asideVoiceIsland ? 18 : 15
+                            color: noReminderMouse.containsMouse ? Qt.rgba(1, 0.3, 0.3, 0.22) : Qt.rgba(1, 0.3, 0.3, 0.12)
+                            border.width: 1
+                            border.color: Qt.rgba(1, 0.3, 0.3, 0.34)
+
+                            AppText {
+                                anchors.centerIn: parent
+                                text: "Нет"
+                                color: Theme.error
+                                font { pixelSize: root.asideVoiceIsland ? 15 : 13; weight: Font.Bold }
+                            }
+
+                            MouseArea {
+                                id: noReminderMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Aside.AsideState.confirmReminder(false)
+                            }
+                        }
+                    }
+                }
+            }
+
             Flickable {
                 id: asideMessagesFlick
                 visible: Aside.AsideState.hasConversation
@@ -410,10 +535,12 @@ Item {
                             readonly property bool shouldDisplay: index >= Math.max(0, Aside.AsideState.messagesModel.count - 2)
                             readonly property bool voiceUser: root.asideVoiceIsland && model.role === "user"
                             readonly property bool voiceAssistant: root.asideVoiceIsland && model.role === "assistant"
+                            readonly property bool hiddenForReminderPreview: Aside.AsideState.reminderPreviewVisible && model.role === "assistant" && model.text === ""
+                            readonly property bool shouldShow: shouldDisplay && !hiddenForReminderPreview
 
-                            visible: shouldDisplay
+                            visible: shouldShow
                             width: voiceUser ? Math.min(asideMessageStack.width, 620) : asideMessageStack.width
-                            height: shouldDisplay ? Math.max(root.asideVoiceIsland ? 72 : 54, asideRoleLabel.implicitHeight + asideMessageText.implicitHeight + (root.asideVoiceIsland ? 30 : 24)) : 0
+                            height: shouldShow ? Math.max(root.asideVoiceIsland ? 72 : 54, asideRoleLabel.implicitHeight + asideMessageText.implicitHeight + (root.asideVoiceIsland ? 30 : 24)) : 0
                             x: voiceUser ? (asideMessageStack.width - width) / 2 : 0
                             radius: root.asideVoiceIsland ? 24 : 20
                             color: root.asideVoiceIsland && model.role === "user" ? "transparent" : Qt.rgba(1, 1, 1, model.role === "user" ? (root.asideVoiceIsland ? 0 : 0.085) : (root.asideVoiceIsland ? 0.095 : 0.075))
