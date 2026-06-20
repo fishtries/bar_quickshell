@@ -584,7 +584,14 @@ def _ollama_generate_stream(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    return urllib.request.urlopen(req, timeout=timeout)
+    try:
+        return urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.HTTPError as e:
+        try:
+            err_msg = e.read().decode("utf-8")
+        except Exception:
+            err_msg = str(e)
+        raise RuntimeError(f"Ollama HTTP Error {e.code}: {err_msg}")
 
 
 # ---------------------------------------------------------------------------

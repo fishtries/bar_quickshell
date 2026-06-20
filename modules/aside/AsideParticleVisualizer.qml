@@ -9,70 +9,82 @@ Item {
     property bool active: false
     property real tick: 0.0
 
-    function clamp(value, minValue, maxValue) {
-        return Math.max(minValue, Math.min(maxValue, value))
-    }
-
-    function random(index, salt) {
-        const value = Math.sin((index + 1) * (salt + 12.9898)) * 43758.5453
-        return value - Math.floor(value)
-    }
-
     implicitWidth: 176
     implicitHeight: 42
-    opacity: active ? 1.0 : 0.68
-
-    Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
+    opacity: active ? 1.0 : 0.0
+    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuad } }
 
     Timer {
         interval: 16
         repeat: true
         running: root.active || root.level > 0.01
-        onTriggered: root.tick += 0.06 + root.clamp(root.level, 0, 1) * 0.12
+        onTriggered: root.tick += 0.02 + Math.min(root.level, 1.0) * 0.08
     }
 
     Rectangle {
-        anchors.fill: parent
+        id: maskRect
+        width: root.width
+        height: root.height
         radius: height / 2
-        color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.06 + root.clamp(root.level, 0, 1) * 0.05)
-        border.width: 1
-        border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.10 + root.clamp(root.level, 0, 1) * 0.18)
-
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            blurEnabled: true
-            blurMax: 24
-            blur: root.active ? 0.08 : 0.02
-        }
+        color: "white"
+        visible: false
     }
 
-    Repeater {
-        model: 42
-
-        Rectangle {
-            readonly property real seedA: root.random(index, 1.7)
-            readonly property real seedB: root.random(index, 4.1)
-            readonly property real seedC: root.random(index, 8.3)
-            readonly property real intensity: root.clamp(root.level, 0, 1)
-            readonly property real wave: Math.sin(root.tick * (0.9 + seedA * 2.2) + index * 0.48)
-            readonly property real drift: Math.cos(root.tick * (0.6 + seedC) + index * 0.31)
-
-            width: 3 + seedA * 4 + intensity * 7
-            height: width
-            radius: width / 2
-            x: 8 + seedB * Math.max(1, root.width - 16) + drift * intensity * 8
-            y: root.height / 2 - height / 2 + wave * (4 + intensity * 18) + (seedC - 0.5) * 10
-            color: Qt.rgba(
-                Theme.info.r + (1 - Theme.info.r) * seedA * 0.18,
-                Theme.info.g + (1 - Theme.info.g) * seedB * 0.18,
-                Theme.info.b + (1 - Theme.info.b) * 0.35,
-                0.18 + seedA * 0.30 + intensity * 0.45
-            )
-            scale: 0.55 + seedC * 0.55 + intensity * 0.65 + Math.max(0, wave) * intensity * 0.35
-
-            Behavior on width { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-            Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-            Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+    // Masked container for the fluid effect
+    Item {
+        anchors.fill: parent
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: maskRect
         }
+
+        // Dark background of the visualizer pill
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0.05, 0.05, 0.05, 0.8)
+        }
+
+        // Aurora Blobs
+        Repeater {
+            model: [
+                { c: "#2d82ff", x: 0.15, y: 0.5, s: 1.2, sp: 0.8 },
+                { c: "#ff3a7c", x: 0.50, y: 0.6, s: 1.5, sp: 1.1 },
+                { c: "#1cb5e0", x: 0.85, y: 0.4, s: 1.3, sp: 0.9 },
+                { c: "#ff7e5f", x: 0.35, y: 0.5, s: 1.4, sp: 1.3 },
+                { c: "#a124e4", x: 0.65, y: 0.5, s: 1.1, sp: 1.0 }
+            ]
+            
+            Rectangle {
+                property real waveX: Math.sin(root.tick * modelData.sp) * 30 * (1 + root.level * 1.5)
+                property real waveY: Math.cos(root.tick * modelData.sp * 1.2) * 12 * (1 + root.level * 2.5)
+                
+                width: root.height * 2.2 * modelData.s * (1.0 + root.level * 0.6)
+                height: root.height * 2.2 * modelData.s * (1.0 + root.level * 1.8)
+                radius: width / 2
+                
+                x: root.width * modelData.x - width / 2 + waveX
+                y: root.height * modelData.y - height / 2 + waveY
+                
+                color: modelData.c
+                opacity: 0.7 + Math.min(root.level, 1.0) * 0.3
+                
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 64
+                    blur: 1.0
+                }
+            }
+        }
+    }
+    
+    // Add an inner shadow/rim light for that glass pill look
+    Rectangle {
+        anchors.fill: parent
+        radius: height / 2
+        color: "transparent"
+        border.color: Qt.rgba(1, 1, 1, 0.15)
+        border.width: 1
     }
 }

@@ -582,6 +582,35 @@ def stop_existing_mpvpaper() -> None:
     time.sleep(0.08)
 
 
+def _reload_gtk_colorscheme() -> None:
+    """Toggle the GTK color-scheme via gsettings so GTK apps reload their CSS without closing."""
+    gsettings = shutil.which("gsettings")
+    if gsettings is None:
+        return
+
+    try:
+        result = subprocess.run(
+            [gsettings, "get", "org.gnome.desktop.interface", "color-scheme"],
+            capture_output=True, text=True, timeout=3,
+        )
+        current = result.stdout.strip().strip("'")
+        if not current:
+            return
+
+        dummy = "prefer-dark" if current != "prefer-dark" else "default"
+        subprocess.run(
+            [gsettings, "set", "org.gnome.desktop.interface", "color-scheme", dummy],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3,
+        )
+        time.sleep(0.05)
+        subprocess.run(
+            [gsettings, "set", "org.gnome.desktop.interface", "color-scheme", current],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3,
+        )
+    except Exception:
+        pass
+
+
 def apply_wallpaper(raw_path: str) -> int:
     mpvpaper = shutil.which("mpvpaper")
     if mpvpaper is None:
@@ -608,7 +637,52 @@ def apply_wallpaper(raw_path: str) -> int:
         start_new_session=True,
         close_fds=True,
     )
-    emit(save_wallpaper_theme(path))
+    payload = save_wallpaper_theme(path)
+    emit(payload)
+
+    matugen = shutil.which("matugen")
+    if matugen:
+        mode = payload.get("mode", "dark")
+        target_path = str(path)
+        if path.suffix.lower() in VIDEO_EXTENSIONS:
+            thumb = video_thumbnail_path(path)
+            if thumb:
+                target_path = thumb
+        log_file = open(CACHE_DIR / "matugen.log", "w")
+        config_path = str(Path.home() / ".config/matugen/config.toml")
+
+        # FIX: ensure target directories exist and remove bad symlinks
+        try:
+            gtk4_css = Path.home() / ".config/gtk-4.0/gtk.css"
+            if gtk4_css.is_symlink():
+                gtk4_css.unlink()
+            
+            nvim_dir = Path.home() / ".config/nvim/lua/core"
+            nvim_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"matugen pre-flight error: {e}", file=log_file)
+
+        accent = payload.get("accent", "")
+        if accent:
+            subprocess.run(
+                [matugen, "-c", config_path, "-m", mode, "color", "hex", accent],
+                stdin=subprocess.DEVNULL,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+            )
+        else:
+            subprocess.run(
+                [matugen, "-c", config_path, "-m", mode, "image", "--source-color-index", "0", target_path],
+                stdin=subprocess.DEVNULL,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+            )
+        log_file.close()
+        # Reload kitty instances to apply the new theme
+        subprocess.run(["pkill", "-USR1", "kitty"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Hot-reload GTK CSS without closing applications
+        _reload_gtk_colorscheme()
+
     return 0
 
 

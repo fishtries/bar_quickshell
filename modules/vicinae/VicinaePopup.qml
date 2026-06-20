@@ -34,7 +34,7 @@ PanelWindow {
     readonly property real rouletteSearchShellHeight: 192
     readonly property real displayedSearchShellHeight: metrics.searchShellHeight + (rouletteSearchShellHeight - metrics.searchShellHeight) * wallpaperRouletteProgress
     readonly property real contentRandomHideOffset: Math.min(180, metrics.contentHeight * 0.45)
-    readonly property bool keyboardInteractive: visible && !closing && inputMorphProgress >= 0.5
+    readonly property bool keyboardInteractive: visible && (closing || inputMorphProgress >= 0.5)
 
     signal closeRequested()
     signal resultActivated(var item)
