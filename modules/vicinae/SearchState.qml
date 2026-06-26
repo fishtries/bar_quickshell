@@ -9,7 +9,7 @@ Item {
 
     property string query: ""
     property int selectedIndex: -1
-    readonly property string placeholderText: clipboardMode ? "Browse clipboard history..." : wallpaperMode ? "Search wallpapers..." : "Search apps, files, and the web..."
+    readonly property string placeholderText: clipboardMode ? "Browse clipboard history..." : wallpaperMode ? "Search wallpapers..." : "Search anything..."
     property bool clipboardMode: false
     property bool wallpaperMode: false
     property string previousSearchQuery: ""

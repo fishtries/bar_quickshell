@@ -39,8 +39,8 @@ Rectangle {
         spacing: 12
 
         Rectangle {
-            Layout.preferredWidth: 26
-            Layout.preferredHeight: 26
+            Layout.preferredWidth: 32
+            Layout.preferredHeight: 32
             Layout.alignment: Qt.AlignVCenter
             radius: 8
             color: selected ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.05)
@@ -49,8 +49,8 @@ Rectangle {
                 visible: root.iconName !== ""
                 anchors.centerIn: parent
                 source: root.iconName !== "" ? "image://icon/" + root.iconName : ""
-                width: 20
-                height: 20
+                width: 24
+                height: 24
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true
@@ -61,7 +61,7 @@ Rectangle {
                 anchors.centerIn: parent
                 text: root.iconText
                 color: root.iconColor
-                font.pixelSize: 15
+                font.pixelSize: 18
             }
 
             Rectangle {
@@ -88,26 +88,9 @@ Rectangle {
                     Layout.fillWidth: true
                     text: root.title
                     color: Theme.textPrimary
-                    font.pixelSize: 14
-                    font.weight: root.selected ? Font.DemiBold : Font.Medium
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
                     elide: Text.ElideRight
-                }
-
-                Rectangle {
-                    visible: root.aliasText !== ""
-                    radius: 8
-                    color: Qt.rgba(1, 1, 1, 0.08)
-                    implicitWidth: aliasLabel.implicitWidth + 10
-                    implicitHeight: 18
-
-                    AppText {
-                        id: aliasLabel
-                        anchors.centerIn: parent
-                        text: root.aliasText
-                        color: Theme.textSecondary
-                        font.pixelSize: 10
-                        font.weight: Font.DemiBold
-                    }
                 }
             }
 
@@ -116,30 +99,12 @@ Rectangle {
                 text: root.subtitle
                 visible: text !== ""
                 color: Theme.textSecondary
-                font.pixelSize: 11
+                font.pixelSize: 12
                 elide: Text.ElideRight
             }
         }
 
-        Rectangle {
-            visible: root.accessoryText !== ""
-            Layout.alignment: Qt.AlignVCenter
-            radius: 9
-            color: Qt.rgba(root.accessoryColor.r, root.accessoryColor.g, root.accessoryColor.b, 0.14)
-            border.width: 1
-            border.color: Qt.rgba(root.accessoryColor.r, root.accessoryColor.g, root.accessoryColor.b, 0.24)
-            implicitWidth: accessoryLabel.implicitWidth + 12
-            implicitHeight: 22
-
-            AppText {
-                id: accessoryLabel
-                anchors.centerIn: parent
-                text: root.accessoryText
-                color: root.accessoryColor
-                font.pixelSize: 10
-                font.weight: Font.DemiBold
-            }
-        }
+        // accessoryText removed as per visual cleanup
     }
 
     MouseArea {

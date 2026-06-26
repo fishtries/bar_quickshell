@@ -27,7 +27,7 @@ PanelWindow {
     readonly property bool wallpaperMode: searchState ? searchState.wallpaperMode : false
     property real clipboardTransitionProgress: clipboardMode ? 1.0 : 0.0
     property real wallpaperTransitionProgress: wallpaperMode ? 1.0 : 0.0
-    readonly property bool keyboardInteractive: visible && !closing && inputMorphProgress >= 0.5
+    readonly property bool keyboardInteractive: visible && (inputMorphProgress >= 0.5 || closing)
 
     signal closeRequested()
     signal resultActivated(var item)

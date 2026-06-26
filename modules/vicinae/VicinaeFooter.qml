@@ -25,28 +25,39 @@ Rectangle {
         anchors.rightMargin: 16
         spacing: 12
 
-        AppText {
+        Item {
             Layout.fillWidth: true
-            text: root.statusText
-            color: Theme.textSecondary
-            font.pixelSize: 11
-            elide: Text.ElideRight
         }
 
-        Rectangle {
+        RowLayout {
             visible: root.primaryActionLabel !== ""
-            radius: 10
-            color: Theme.bgHover
-            implicitWidth: primaryLabel.implicitWidth + 14
-            implicitHeight: 24
+            spacing: 6
+            Layout.preferredHeight: 24
+
+            Rectangle {
+                color: Qt.rgba(1, 1, 1, 0.08)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.15)
+                radius: 4
+                Layout.preferredWidth: primaryKeyText.implicitWidth + 10
+                Layout.preferredHeight: 18
+                Layout.alignment: Qt.AlignVCenter
+
+                AppText {
+                    id: primaryKeyText
+                    anchors.centerIn: parent
+                    text: "Enter"
+                    color: Theme.textPrimary
+                    font.pixelSize: 9
+                    font.weight: Font.DemiBold
+                }
+            }
 
             AppText {
-                id: primaryLabel
-                anchors.centerIn: parent
-                text: "↵ " + root.primaryActionLabel
-                color: Theme.textPrimary
+                text: root.primaryActionLabel
+                color: Theme.textSecondary
                 font.pixelSize: 11
-                font.weight: Font.DemiBold
+                Layout.alignment: Qt.AlignVCenter
             }
 
             MouseArea {
@@ -55,20 +66,36 @@ Rectangle {
             }
         }
 
-        Rectangle {
+        RowLayout {
             visible: root.secondaryActionLabel !== ""
-            radius: 10
-            color: Theme.bgHover
-            implicitWidth: secondaryLabel.implicitWidth + 14
-            implicitHeight: 24
+            spacing: 6
+            Layout.preferredHeight: 24
+
+            Rectangle {
+                visible: root.secondaryActionShortcut !== ""
+                color: Qt.rgba(1, 1, 1, 0.08)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.15)
+                radius: 4
+                Layout.preferredWidth: secondaryKeyText.implicitWidth + 10
+                Layout.preferredHeight: 18
+                Layout.alignment: Qt.AlignVCenter
+
+                AppText {
+                    id: secondaryKeyText
+                    anchors.centerIn: parent
+                    text: root.secondaryActionShortcut
+                    color: Theme.textPrimary
+                    font.pixelSize: 9
+                    font.weight: Font.DemiBold
+                }
+            }
 
             AppText {
-                id: secondaryLabel
-                anchors.centerIn: parent
-                text: (root.secondaryActionShortcut !== "" ? root.secondaryActionShortcut + " " : "") + root.secondaryActionLabel
+                text: root.secondaryActionLabel
                 color: Theme.textSecondary
                 font.pixelSize: 11
-                font.weight: Font.DemiBold
+                Layout.alignment: Qt.AlignVCenter
             }
 
             MouseArea {
@@ -77,20 +104,35 @@ Rectangle {
             }
         }
 
-        Rectangle {
+        RowLayout {
             visible: root.escapeActionLabel !== ""
-            radius: 10
-            color: Theme.bgHover
-            implicitWidth: escapeLabel.implicitWidth + 14
-            implicitHeight: 24
+            spacing: 6
+            Layout.preferredHeight: 24
+
+            Rectangle {
+                color: Qt.rgba(1, 1, 1, 0.08)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.15)
+                radius: 4
+                Layout.preferredWidth: escapeKeyText.implicitWidth + 10
+                Layout.preferredHeight: 18
+                Layout.alignment: Qt.AlignVCenter
+
+                AppText {
+                    id: escapeKeyText
+                    anchors.centerIn: parent
+                    text: "Esc"
+                    color: Theme.textPrimary
+                    font.pixelSize: 9
+                    font.weight: Font.DemiBold
+                }
+            }
 
             AppText {
-                id: escapeLabel
-                anchors.centerIn: parent
-                text: "Esc " + root.escapeActionLabel
+                text: root.escapeActionLabel
                 color: Theme.textSecondary
                 font.pixelSize: 11
-                font.weight: Font.DemiBold
+                Layout.alignment: Qt.AlignVCenter
             }
         }
     }

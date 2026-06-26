@@ -216,8 +216,12 @@ def command_paste(argv):
         return copied
 
     time.sleep(0.38)
-    pasted = subprocess.run(["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"])
-    return pasted.returncode
+    try:
+        pasted = subprocess.run(["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"])
+        return pasted.returncode
+    except FileNotFoundError:
+        subprocess.run(["notify-send", "-a", "Vicinae", "Clipboard Error", "Please install 'wtype' to paste items."])
+        return 127
 
 
 def main():

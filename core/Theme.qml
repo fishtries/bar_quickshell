@@ -45,7 +45,7 @@ Item {
     property string fontClock: "MariosBlack"
     property string fontIcon: "JetBrainsMono Nerd Font"
 
-    function applyWallpaperTheme(mode, luminance, path, samples) {
+    function applyWallpaperTheme(mode, luminance, path, samples, matugen) {
         root.colorMode = mode === "light" ? "light" : "dark"
 
         let numericLuminance = Number(luminance)
@@ -57,6 +57,13 @@ Item {
 
         if (samples instanceof Array)
             root.wallpaperSamples = samples
+
+        if (matugen) {
+            if (matugen.primary && matugen.primary.default) root.info = matugen.primary.default.color
+            if (matugen.secondary && matugen.secondary.default) root.success = matugen.secondary.default.color
+            if (matugen.tertiary && matugen.tertiary.default) root.warning = matugen.tertiary.default.color
+            if (matugen.error && matugen.error.default) root.error = matugen.error.default.color
+        }
     }
 
     function itemCenterX(item) {
@@ -143,7 +150,7 @@ Item {
 
         try {
             let payload = JSON.parse(line)
-            root.applyWallpaperTheme(payload.mode, payload.luminance, payload.wallpaper, payload.samples)
+            root.applyWallpaperTheme(payload.mode, payload.luminance, payload.wallpaper, payload.samples, payload.matugen)
         } catch (error) {
         }
     }

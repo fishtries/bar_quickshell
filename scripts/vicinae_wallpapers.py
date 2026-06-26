@@ -427,7 +427,59 @@ def apply_wallpaper(raw_path: str) -> int:
         start_new_session=True,
         close_fds=True,
     )
-    emit(save_wallpaper_theme(path))
+    payload = save_wallpaper_theme(path)
+
+    try:
+        matugen = shutil.which("matugen")
+        if matugen:
+            matugen_img = path
+            if path.suffix.lower() in VIDEO_EXTENSIONS:
+                thumbnail = video_thumbnail_path(path)
+                if thumbnail:
+                    matugen_img = Path(thumbnail)
+            
+            mode = payload.get("mode", "dark")
+            
+            # 1. Run matugen to generate templates (and apply)
+            subprocess.run(
+                [matugen, "image", str(matugen_img), "--mode", mode, "--source-color-index", "0"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            
+            # 2. Run matugen to get JSON output
+            result = subprocess.run(
+                [matugen, "image", str(matugen_img), "--mode", mode, "--source-color-index", "0", "-j", "hex"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True
+            )
+            
+            if result.returncode == 0 and result.stdout:
+                parsed_matugen = json.loads(result.stdout)
+                payload["matugen"] = parsed_matugen.get("colors", {})
+                
+                # Resave payload with matugen data
+                THEME_STATE_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+                
+            # Reload GTK theme to force apps like Thunar to update, using adw-gtk3 for matugen
+            target_theme = "adw-gtk3-dark" if mode == "dark" else "adw-gtk3"
+            target_color_scheme = "prefer-dark" if mode == "dark" else "prefer-light"
+            
+            current_theme_proc = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"], capture_output=True, text=True)
+            current_theme = current_theme_proc.stdout.strip().strip("'").strip('"') if current_theme_proc.returncode == 0 else ""
+            
+            if current_theme == target_theme:
+                # Toggle to force CSS reload if the theme name hasn't changed
+                subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", "Adwaita"])
+                time.sleep(0.05)
+                
+            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", target_theme])
+            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", target_color_scheme])
+    except Exception:
+        pass
+
+    emit(payload)
     return 0
 
 
